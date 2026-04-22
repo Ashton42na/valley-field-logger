@@ -1,129 +1,87 @@
-const NOMINATIM = 'https://nominatim.openstreetmap.org'
-const OVERPASS = 'https://overpass-api.de/api/interpreter'
-const UA = 'ValleyFieldLogger/1.0 (ashton@valleytechlogic.com)'
+const PLACES_BASE = 'https://places.googleapis.com/v1'
 
-export async function searchByName(query) {
-  const params = new URLSearchParams({
-    q: query,
-    format: 'json',
-    addressdetails: '1',
-    extratags: '1',
-    namedetails: '1',
-    limit: '10',
-    countrycodes: 'us'
-  })
-  const res = await fetch(`${NOMINATIM}/search?${params}`, {
-    headers: { 'Accept-Language': 'en-US', 'User-Agent': UA }
-  })
-  if (!res.ok) throw new Error('Search failed — check your connection')
-  const results = await res.json()
+const FIELD_MASK = [
+  'places.id',
+  'places.displayName',
+  'places.formattedAddress',
+  'places.nationalPhoneNumber',
+  'places.websiteUri',
+  'places.types',
+  'places.primaryTypeDisplayName',
+  'places.location'
+].join(',')
 
-  return results.map(r => ({
-    placeId: String(r.place_id),
-    name: r.namedetails?.name || r.display_name.split(',')[0].trim(),
-    address: formatNominatimAddress(r.address),
-    phone: r.extratags?.phone || r.extratags?.['contact:phone'] || '',
-    website: r.extratags?.website || r.extratags?.['contact:website'] || '',
-    industry: guessIndustry(r.type, r.category, r.extratags),
-    lat: parseFloat(r.lat),
-    lon: parseFloat(r.lon)
-  }))
+function headers(apiKey) {
+  return {
+    'Content-Type': 'application/json',
+    'X-Goog-Api-Key': apiKey,
+    'X-Goog-FieldMask': FIELD_MASK
+  }
 }
 
-export async function findNearby(lat, lon, radiusMeters = 800) {
-  const query = `
-[out:json][timeout:20];
-(
-  node["name"]["shop"](around:${radiusMeters},${lat},${lon});
-  node["name"]["office"](around:${radiusMeters},${lat},${lon});
-  node["name"]["amenity"~"^(restaurant|cafe|bar|bank|clinic|pharmacy|dentist|doctor|hospital|school|college|hotel|motel|car_wash|car_repair|fuel)$"](around:${radiusMeters},${lat},${lon});
-  node["name"]["craft"](around:${radiusMeters},${lat},${lon});
-  node["name"]["healthcare"](around:${radiusMeters},${lat},${lon});
-  node["name"]["industrial"](around:${radiusMeters},${lat},${lon});
-  way["name"]["shop"](around:${radiusMeters},${lat},${lon});
-  way["name"]["office"](around:${radiusMeters},${lat},${lon});
-  way["name"]["amenity"~"^(restaurant|cafe|bar|bank|clinic|pharmacy|dentist|hospital|school|hotel)$"](around:${radiusMeters},${lat},${lon});
-);
-out center 30;
-`
-  const res = await fetch(OVERPASS, {
+export async function searchByName(query, apiKey) {
+  if (!apiKey) throw new Error('Google Places API key not set — add it in Settings.')
+  const res = await fetch(`${PLACES_BASE}/places:searchText`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
-    body: `data=${encodeURIComponent(query)}`
+    headers: headers(apiKey),
+    body: JSON.stringify({ textQuery: query, regionCode: 'US', languageCode: 'en', maxResultCount: 10 })
   })
-  if (!res.ok) throw new Error('Nearby search failed — check your connection')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error?.message || 'Search failed — check your API key.')
+  }
   const data = await res.json()
+  return (data.places || []).map(mapPlace)
+}
 
-  const seen = new Set()
-  return data.elements
-    .filter(e => e.tags?.name)
-    .map(e => {
-      const lat2 = e.lat ?? e.center?.lat
-      const lon2 = e.lon ?? e.center?.lon
-      return {
-        placeId: `osm-${e.type}-${e.id}`,
-        name: e.tags.name,
-        address: formatOverpassAddress(e.tags),
-        phone: e.tags.phone || e.tags['contact:phone'] || '',
-        website: e.tags.website || e.tags['contact:website'] || '',
-        industry: guessIndustryFromTags(e.tags),
-        lat: lat2,
-        lon: lon2,
-        distMeters: lat2 && lon2 ? haversine(lat, lon, lat2, lon2) : null
-      }
+export async function findNearby(lat, lon, apiKey, radiusMeters = 800) {
+  if (!apiKey) throw new Error('Google Places API key not set — add it in Settings.')
+  const res = await fetch(`${PLACES_BASE}/places:searchNearby`, {
+    method: 'POST',
+    headers: headers(apiKey),
+    body: JSON.stringify({
+      locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius: radiusMeters } },
+      languageCode: 'en',
+      maxResultCount: 20
     })
-    .filter(b => {
-      if (seen.has(b.name)) return false
-      seen.add(b.name)
-      return true
-    })
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error?.message || 'Nearby search failed — check your API key.')
+  }
+  const data = await res.json()
+  return (data.places || [])
+    .map(p => ({ ...mapPlace(p), distMeters: p.location ? haversine(lat, lon, p.location.latitude, p.location.longitude) : null }))
     .sort((a, b) => (a.distMeters ?? 9999) - (b.distMeters ?? 9999))
 }
 
-function formatNominatimAddress(addr) {
-  if (!addr) return ''
-  const street = addr.house_number && addr.road
-    ? `${addr.house_number} ${addr.road}`
-    : addr.road || ''
-  const city = addr.city || addr.town || addr.village || addr.hamlet || ''
-  const parts = [street, city, addr.state, addr.postcode].filter(Boolean)
-  return parts.join(', ')
+function mapPlace(p) {
+  return {
+    placeId: p.id || '',
+    name: p.displayName?.text || '',
+    address: p.formattedAddress || '',
+    phone: p.nationalPhoneNumber || '',
+    website: p.websiteUri || '',
+    industry: mapIndustry(p.types || [], p.primaryTypeDisplayName?.text),
+    lat: p.location?.latitude ?? null,
+    lon: p.location?.longitude ?? null
+  }
 }
 
-function formatOverpassAddress(tags) {
-  const num = tags['addr:housenumber'] || ''
-  const street = tags['addr:street'] || ''
-  const city = tags['addr:city'] || ''
-  const state = tags['addr:state'] || ''
-  const zip = tags['addr:postcode'] || ''
-  const line1 = [num, street].filter(Boolean).join(' ')
-  return [line1, city, state, zip].filter(Boolean).join(', ')
-}
-
-function guessIndustry(type, category, extratags) {
-  const shopType = extratags?.shop
-  const amenity = extratags?.amenity
-  const office = extratags?.office
-  return _categoryMap(type, category, shopType, amenity, office)
-}
-
-function guessIndustryFromTags(tags) {
-  return _categoryMap(tags.amenity, tags.shop || tags.craft, tags.shop, tags.amenity, tags.office)
-}
-
-function _categoryMap(type, category, shop, amenity, office) {
-  if (office) return 'Office / Professional Services'
-  if (shop === 'electronics' || shop === 'computer') return 'Technology / Electronics'
-  if (shop === 'car' || shop === 'car_repair') return 'Automotive'
-  if (amenity === 'bank' || amenity === 'atm') return 'Finance / Banking'
-  if (amenity === 'clinic' || amenity === 'dentist' || amenity === 'doctor' || amenity === 'pharmacy' || amenity === 'hospital') return 'Healthcare'
-  if (amenity === 'restaurant' || amenity === 'cafe' || amenity === 'bar' || amenity === 'fast_food') return 'Food & Beverage'
-  if (amenity === 'school' || amenity === 'college' || amenity === 'university') return 'Education'
-  if (amenity === 'hotel' || amenity === 'motel') return 'Hospitality'
-  if (amenity === 'fuel' || amenity === 'car_wash' || amenity === 'car_repair') return 'Automotive'
-  if (shop) return 'Retail'
-  if (type === 'industrial' || category === 'industrial') return 'Manufacturing / Industrial'
-  return 'Business'
+function mapIndustry(types, primaryDisplay) {
+  const t = types.join(' ')
+  if (/hospital|doctor|dentist|pharmacy|health|medical/.test(t)) return 'Healthcare'
+  if (/bank|finance|atm|insurance/.test(t)) return 'Finance / Banking'
+  if (/restaurant|cafe|bar|food|meal/.test(t)) return 'Food & Beverage'
+  if (/school|university|college|education/.test(t)) return 'Education'
+  if (/lodging|hotel|motel/.test(t)) return 'Hospitality'
+  if (/car_dealer|car_repair|car_wash|auto_/.test(t)) return 'Automotive'
+  if (/electronics|computer/.test(t)) return 'Technology / Electronics'
+  if (/real_estate/.test(t)) return 'Real Estate'
+  if (/lawyer|legal/.test(t)) return 'Legal'
+  if (/store|shop/.test(t)) return 'Retail'
+  if (/office|corporate|professional/.test(t)) return 'Office / Professional Services'
+  return primaryDisplay || 'Business'
 }
 
 function haversine(lat1, lon1, lat2, lon2) {

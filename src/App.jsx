@@ -36,6 +36,7 @@ export default function App() {
   const [view, setView] = useState('search')
   const [pendingBusiness, setPendingBusiness] = useState(null)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('vfl-anthropic-key') || '')
+  const [placesApiKey, setPlacesApiKey] = useState(() => localStorage.getItem('vfl-google-places-key') || '')
   const [toast, setToast] = useState(null)
   const toastTimer = { current: null }
 
@@ -50,6 +51,11 @@ export default function App() {
   const saveApiKey = useCallback((key) => {
     setApiKey(key)
     localStorage.setItem('vfl-anthropic-key', key)
+  }, [])
+
+  const savePlacesApiKey = useCallback((key) => {
+    setPlacesApiKey(key)
+    localStorage.setItem('vfl-google-places-key', key)
   }, [])
 
   const handleBusinessSelect = useCallback((business) => {
@@ -86,13 +92,17 @@ export default function App() {
         <>
           <div className="view">
             {view === 'search' && (
-              <SearchView onSelectBusiness={handleBusinessSelect} />
+              <SearchView onSelectBusiness={handleBusinessSelect} placesApiKey={placesApiKey} />
             )}
             {view === 'visits' && (
               <VisitList showToast={showToast} />
             )}
             {view === 'settings' && (
-              <Settings apiKey={apiKey} onSaveApiKey={saveApiKey} showToast={showToast} />
+              <Settings
+                apiKey={apiKey} onSaveApiKey={saveApiKey}
+                placesApiKey={placesApiKey} onSavePlacesApiKey={savePlacesApiKey}
+                showToast={showToast}
+              />
             )}
           </div>
 

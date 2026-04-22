@@ -20,14 +20,23 @@ const IconInfo = () => (
   </svg>
 )
 
-export default function Settings({ apiKey, onSaveApiKey, showToast }) {
+export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePlacesApiKey, showToast }) {
   const [draft, setDraft] = useState(apiKey)
   const [showKey, setShowKey] = useState(false)
   const changed = draft !== apiKey
 
+  const [placesDraft, setPlacesDraft] = useState(placesApiKey)
+  const [showPlacesKey, setShowPlacesKey] = useState(false)
+  const placesChanged = placesDraft !== placesApiKey
+
   const handleSave = () => {
     onSaveApiKey(draft.trim())
     showToast('API key saved', 'success')
+  }
+
+  const handlePlacesSave = () => {
+    onSavePlacesApiKey(placesDraft.trim())
+    showToast('Places API key saved', 'success')
   }
 
   return (
@@ -110,18 +119,53 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
         </div>
       </div>
 
-      {/* GPS / Search */}
+      {/* Google Places API key */}
       <p className="section-title" style={{ marginBottom: 10 }}>Business Search</p>
       <div className="card" style={{ marginBottom: 32 }}>
         <div className="settings-row">
           <div className="settings-label">
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IconInfo /> Data Sources
+              <IconKey /> Google Places API Key
             </span>
           </div>
-          <p className="settings-hint" style={{ marginTop: 0 }}>
-            Business search uses OpenStreetMap (Nominatim) and the Overpass API — both free and open-source.
-            Coverage is excellent in most US cities. For full business details, edit fields manually after selecting.
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="form-input"
+              type={showPlacesKey ? 'text' : 'password'}
+              value={placesDraft}
+              onChange={e => setPlacesDraft(e.target.value)}
+              placeholder="AIza…"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ fontFamily: showPlacesKey ? 'monospace' : 'inherit', fontSize: 14, flex: 1 }}
+            />
+            <button
+              className="btn btn-icon"
+              onClick={() => setShowPlacesKey(v => !v)}
+              aria-label={showPlacesKey ? 'Hide key' : 'Show key'}
+              style={{ flexShrink: 0 }}
+            >
+              {showPlacesKey
+                ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              }
+            </button>
+          </div>
+          {placesChanged && (
+            <button className="btn btn-primary btn-full" onClick={handlePlacesSave} style={{ height: 44 }}>
+              <IconCheck />
+              Save Key
+            </button>
+          )}
+          {placesApiKey && !placesChanged && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--green)' }}>
+              <IconCheck /> Key saved
+            </div>
+          )}
+          <p className="settings-hint">
+            Powers name search (Text Search) and GPS nearby search (Nearby Search). Key stored locally on this device only.
+            Get a key at console.cloud.google.com — enable "Places API (New)" and restrict it to this site.
           </p>
         </div>
       </div>
