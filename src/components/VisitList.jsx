@@ -10,6 +10,16 @@ const STATUS_META = {
   'call-back':      { label: 'Call Back',       cls: 'badge-call-back',      emoji: '↩️' }
 }
 
+const OUTCOME_LABELS = {
+  'left-info':          'Left Info',
+  'spoke-to-owner':     'Spoke to Owner',
+  'gatekeeper-only':    'Gatekeeper Only',
+  'requested-callback': 'Requested Callback',
+  'not-interested':     'Not Interested'
+}
+
+const TEMP_COLORS = { cold: 'var(--blue)', warm: 'var(--yellow)', hot: 'var(--red)' }
+
 const FILTERS = ['All', 'Visited', 'Followed Up', 'Meeting Set', 'Not Interested', 'Call Back']
 const FILTER_KEYS = {
   'All': null, 'Visited': 'visited', 'Followed Up': 'followed-up',
@@ -41,6 +51,14 @@ const IconClipboard = () => (
     <rect x="8" y="2" width="8" height="4" rx="1"/>
   </svg>
 )
+const IconChart = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="18" y1="20" x2="18" y2="10"/>
+    <line x1="12" y1="20" x2="12" y2="4"/>
+    <line x1="6" y1="20" x2="6" y2="14"/>
+    <line x1="2" y1="20" x2="22" y2="20"/>
+  </svg>
+)
 
 function toDayKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -66,6 +84,11 @@ function groupByDay(visits) {
   return [...map.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([key, visits]) => ({ key, label: toDayLabel(key), visits }))
+}
+
+function formatFollowUpDate(key) {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 function StatusBadge({ status }) {
@@ -107,13 +130,40 @@ function VisitItem({ visit, onDelete }) {
           {visit.contactName && (
             <div className="visit-detail-row">
               <span className="visit-detail-label">Contact</span>
-              <span>{visit.contactName}</span>
+              <span>{visit.contactName}{visit.contactTitle ? ` · ${visit.contactTitle}` : ''}</span>
+            </div>
+          )}
+          {visit.email && (
+            <div className="visit-detail-row">
+              <span className="visit-detail-label">Email</span>
+              <a href={`mailto:${visit.email}`} style={{ color: 'var(--blue)', wordBreak: 'break-all' }}>{visit.email}</a>
             </div>
           )}
           {visit.industry && (
             <div className="visit-detail-row">
               <span className="visit-detail-label">Industry</span>
               <span>{visit.industry}</span>
+            </div>
+          )}
+          {visit.temperature && (
+            <div className="visit-detail-row">
+              <span className="visit-detail-label">Temp</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: TEMP_COLORS[visit.temperature], flexShrink: 0 }} />
+                {visit.temperature.charAt(0).toUpperCase() + visit.temperature.slice(1)}
+              </span>
+            </div>
+          )}
+          {visit.outcome && (
+            <div className="visit-detail-row">
+              <span className="visit-detail-label">Outcome</span>
+              <span>{OUTCOME_LABELS[visit.outcome] || visit.outcome}</span>
+            </div>
+          )}
+          {visit.followUpDate && (
+            <div className="visit-detail-row">
+              <span className="visit-detail-label">Follow-up</span>
+              <span>{new Date(visit.followUpDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
             </div>
           )}
           {visit.phone && (
@@ -202,10 +252,122 @@ function DayGroup({ group, onDelete, onExport }) {
   )
 }
 
+function SummaryView({ visits, onClose }) {
+  const todayKey = toDayKey(new Date())
+  const todayVisits = useMemo(() => visits.filter(v => toDayKey(new Date(v.timestamp)) === todayKey), [visits, todayKey])
+
+  const temps = useMemo(() => {
+    const t = { hot: 0, warm: 0, cold: 0, none: 0 }
+    todayVisits.forEach(v => { t[v.temperature || 'none']++ })
+    return t
+  }, [todayVisits])
+
+  const outcomes = useMemo(() => {
+    const o = {}
+    todayVisits.forEach(v => { if (v.outcome) o[v.outcome] = (o[v.outcome] || 0) + 1 })
+    return o
+  }, [todayVisits])
+
+  const upcomingByDate = useMemo(() => {
+    const map = {}
+    visits.forEach(v => {
+      if (v.followUpDate && v.followUpDate >= todayKey) {
+        if (!map[v.followUpDate]) map[v.followUpDate] = []
+        map[v.followUpDate].push(v.companyName || 'Unknown')
+      }
+    })
+    return map
+  }, [visits, todayKey])
+
+  const upcomingDates = Object.keys(upcomingByDate).sort()
+
+  const tempRows = [
+    { key: 'hot',  label: 'Hot',  color: 'var(--red)' },
+    { key: 'warm', label: 'Warm', color: 'var(--yellow)' },
+    { key: 'cold', label: 'Cold', color: 'var(--blue)' }
+  ]
+
+  return (
+    <div className="view-inner">
+      <div style={{ paddingTop: 16, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>Today's Summary</span>
+        <button className="btn btn-ghost" onClick={onClose} style={{ height: 36, fontSize: 14, padding: '0 14px' }}>
+          Done
+        </button>
+      </div>
+
+      {todayVisits.length === 0 ? (
+        <div className="empty-state">
+          <IconClipboard />
+          <h3>No visits today</h3>
+          <p>Log your first visit from the Find &amp; Log tab</p>
+        </div>
+      ) : (
+        <>
+          <div className="summary-hero">
+            <span className="summary-hero-num">{todayVisits.length}</span>
+            <span className="summary-hero-label">visit{todayVisits.length !== 1 ? 's' : ''} today</span>
+          </div>
+
+          <p className="section-title" style={{ marginBottom: 10 }}>Lead Temperature</p>
+          <div className="card" style={{ marginBottom: 16 }}>
+            {tempRows.map(t => temps[t.key] > 0 && (
+              <div key={t.key} className="summary-row">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+                  {t.label}
+                </span>
+                <span className="summary-count">{temps[t.key]}</span>
+              </div>
+            ))}
+            {temps.none > 0 && (
+              <div className="summary-row">
+                <span style={{ color: 'var(--text3)' }}>Not rated</span>
+                <span className="summary-count" style={{ color: 'var(--text3)' }}>{temps.none}</span>
+              </div>
+            )}
+          </div>
+
+          {Object.keys(outcomes).length > 0 && (
+            <>
+              <p className="section-title" style={{ marginBottom: 10 }}>Visit Outcomes</p>
+              <div className="card" style={{ marginBottom: 16 }}>
+                {Object.entries(outcomes).map(([key, count]) => (
+                  <div key={key} className="summary-row">
+                    <span>{OUTCOME_LABELS[key] || key}</span>
+                    <span className="summary-count">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {upcomingDates.length > 0 && (
+            <>
+              <p className="section-title" style={{ marginBottom: 10 }}>Upcoming Follow-ups</p>
+              <div className="card" style={{ marginBottom: 24 }}>
+                {upcomingDates.map(date => (
+                  <div key={date} className="summary-row" style={{ alignItems: 'flex-start' }}>
+                    <span style={{ color: 'var(--green)', fontWeight: 600, minWidth: 76, flexShrink: 0 }}>
+                      {formatFollowUpDate(date)}
+                    </span>
+                    <span style={{ color: 'var(--text2)' }}>{upcomingByDate[date].join(', ')}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function VisitList({ showToast }) {
   const [visits, setVisits] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
+  const [showSummary, setShowSummary] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -247,11 +409,23 @@ export default function VisitList({ showToast }) {
 
   const groups = useMemo(() => groupByDay(filtered), [filtered])
 
+  if (showSummary) {
+    return <SummaryView visits={visits} onClose={() => setShowSummary(false)} />
+  }
+
   return (
     <div className="view-inner">
       <div style={{ paddingTop: 16 }}>
-        <div style={{ marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>My Visits</span>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowSummary(true)}
+            style={{ height: 36, fontSize: 13, padding: '0 12px', gap: 6 }}
+          >
+            <IconChart />
+            Today
+          </button>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>
           {visits.length} total visit{visits.length !== 1 ? 's' : ''}

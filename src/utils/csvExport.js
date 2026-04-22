@@ -1,7 +1,15 @@
+const OUTCOME_LABELS = {
+  'left-info': 'Left Info',
+  'spoke-to-owner': 'Spoke to Owner',
+  'gatekeeper-only': 'Gatekeeper Only',
+  'requested-callback': 'Requested Callback',
+  'not-interested': 'Not Interested'
+}
+
 export function exportVisitsToCSV(visits, filename) {
   const headers = [
     'Date', 'Time', 'Company Name', 'Address', 'Phone', 'Website',
-    'Industry', 'Contact Name', 'Status', 'Notes', 'Voice Note'
+    'Industry', 'Contact Name', 'Contact Title', 'Email', 'Status', 'Temperature', 'Outcome', 'Follow-up Date', 'Notes', 'Voice Note'
   ]
 
   const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`
@@ -17,7 +25,12 @@ export function exportVisitsToCSV(visits, filename) {
       v.website,
       v.industry,
       v.contactName,
+      v.contactTitle || '',
+      v.email || '',
       v.status,
+      v.temperature ? v.temperature.charAt(0).toUpperCase() + v.temperature.slice(1) : '',
+      OUTCOME_LABELS[v.outcome] || v.outcome || '',
+      v.followUpDate || '',
       v.notes,
       v.voiceNote
     ].map(esc).join(',')

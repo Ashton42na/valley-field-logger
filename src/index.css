@@ -377,6 +377,89 @@ html, body {
   border: 1px solid var(--border);
 }
 
+/* ── Temperature picker ────────────────────────────── */
+
+.temp-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.temp-chip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r);
+  border: 1.5px solid var(--border);
+  background: var(--s1);
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.temp-chip:active { transform: scale(0.97); }
+
+.temp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.temp-chip.temp-cold { border-color: var(--blue);   background: var(--blue-dim);   color: var(--blue); }
+.temp-chip.temp-warm { border-color: var(--yellow); background: var(--yellow-dim); color: var(--yellow); }
+.temp-chip.temp-hot  { border-color: var(--red);    background: var(--red-dim);    color: var(--red); }
+
+/* ── Outcome picker ────────────────────────────────── */
+
+.outcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.outcome-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 10px;
+  border-radius: var(--r);
+  border: 1.5px solid var(--border);
+  background: var(--s1);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  line-height: 1.3;
+  transition: all 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.outcome-chip:active { transform: scale(0.97); }
+
+.outcome-chip.active {
+  border-color: var(--green);
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+/* ── Date input ────────────────────────────────────── */
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.5);
+  cursor: pointer;
+}
+
 /* ── Status picker ─────────────────────────────────── */
 
 .status-grid {
@@ -799,6 +882,48 @@ html, body {
 .loading-row .spinner {
   border-color: rgba(96,99,122,0.3);
   border-top-color: var(--text3);
+}
+
+/* ── Summary ───────────────────────────────────────── */
+
+.summary-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 16px 0 24px;
+}
+
+.summary-hero-num {
+  font-size: 56px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.summary-hero-label {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text2);
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text);
+  gap: 12px;
+}
+
+.summary-row:last-child { border-bottom: none; }
+
+.summary-count {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
 }
 
 /* ── Day groups ────────────────────────────────────── */
