@@ -123,14 +123,18 @@ export default function VoiceNote({ value, onChange, apiKey, showToast }) {
             />
             {hasContent && (
               <div className="voice-actions">
-                <button
-                  className="ai-btn"
-                  onClick={handleCleanup}
-                  disabled={cleaning || isRecording}
-                >
-                  {cleaning ? <span className="spinner" style={{ borderColor: 'rgba(167,139,250,0.3)', borderTopColor: 'var(--purple)' }} /> : <IconSparkle />}
-                  {cleaning ? 'Cleaning…' : 'Clean with AI'}
-                </button>
+                {apiKey ? (
+                  <button
+                    className="ai-btn"
+                    onClick={handleCleanup}
+                    disabled={cleaning || isRecording}
+                  >
+                    {cleaning ? <span className="spinner" style={{ borderColor: 'rgba(167,139,250,0.3)', borderTopColor: 'var(--purple)' }} /> : <IconSparkle />}
+                    {cleaning ? 'Cleaning…' : 'Clean with AI'}
+                  </button>
+                ) : (
+                  <span className="voice-no-key">Add your Anthropic API key in Settings to use AI cleanup</span>
+                )}
                 <button className="clear-btn" onClick={handleClear} disabled={isRecording}>
                   <IconTrash />
                   Clear

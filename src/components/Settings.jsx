@@ -77,7 +77,7 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
       </div>
 
       {/* Anthropic API key */}
-      <p className="section-title" style={{ marginBottom: 10 }}>AI Voice Cleanup</p>
+      <p className="section-title" style={{ marginBottom: 10 }}>AI Notes Cleanup</p>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="settings-row">
           <div className="settings-label">
