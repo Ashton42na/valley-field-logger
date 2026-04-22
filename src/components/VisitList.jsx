@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getAllVisits, deleteVisit } from '../db/db.js'
 import { exportVisitsToCSV } from '../utils/csvExport.js'
 
@@ -30,8 +30,8 @@ const IconTrash = () => (
   </svg>
 )
 const IconChevron = ({ open }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-    style={{ width: 16, height: 16, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+    style={{ width: 14, height: 14, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
     <polyline points="6 9 12 15 18 9"/>
   </svg>
 )
@@ -42,6 +42,32 @@ const IconClipboard = () => (
   </svg>
 )
 
+function toDayKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function toDayLabel(key) {
+  const [y, m, d] = key.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const todayKey = toDayKey(new Date())
+  const yest = new Date(); yest.setDate(yest.getDate() - 1)
+  if (key === todayKey) return 'Today'
+  if (key === toDayKey(yest)) return 'Yesterday'
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function groupByDay(visits) {
+  const map = new Map()
+  for (const v of visits) {
+    const key = toDayKey(new Date(v.timestamp))
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(v)
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, visits]) => ({ key, label: toDayLabel(key), visits }))
+}
+
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || { label: status, cls: 'badge-unknown', emoji: '•' }
   return <span className={`badge ${meta.cls}`}>{meta.emoji} {meta.label}</span>
@@ -51,9 +77,7 @@ function VisitItem({ visit, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
-  const date = new Date(visit.timestamp)
-  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const timeStr = new Date(visit.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 
   const handleDelete = () => {
     if (!confirming) { setConfirming(true); return }
@@ -67,7 +91,7 @@ function VisitItem({ visit, onDelete }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="visit-company">{visit.companyName || 'Unknown Business'}</div>
             <div className="visit-meta">
-              <span>{dateStr} · {timeStr}</span>
+              <span>{timeStr}</span>
               {visit.address && <span>{visit.address.split(',')[0]}</span>}
             </div>
           </div>
@@ -149,6 +173,35 @@ function VisitItem({ visit, onDelete }) {
   )
 }
 
+function DayGroup({ group, onDelete, onExport }) {
+  const [open, setOpen] = useState(group.key === toDayKey(new Date()))
+
+  return (
+    <div className="day-group">
+      <div className="day-group-header" onClick={() => setOpen(o => !o)}>
+        <IconChevron open={open} />
+        <span className="day-group-label">{group.label}</span>
+        <span className="day-group-count">{group.visits.length}</span>
+        <div
+          className="day-export-btn"
+          role="button"
+          title={`Export ${group.label}`}
+          onClick={e => { e.stopPropagation(); onExport(group.visits, group.key) }}
+        >
+          <IconDownload />
+        </div>
+      </div>
+      {open && (
+        <div className="card" style={{ marginBottom: 0 }}>
+          {group.visits.map(v => (
+            <VisitItem key={v.id} visit={v} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function VisitList({ showToast }) {
   const [visits, setVisits] = useState([])
   const [loading, setLoading] = useState(true)
@@ -178,33 +231,27 @@ export default function VisitList({ showToast }) {
     }
   }, [showToast])
 
-  const handleExport = useCallback(() => {
-    const toExport = filter === 'All' ? visits : visits.filter(v => v.status === FILTER_KEYS[filter])
-    if (toExport.length === 0) {
-      showToast('No visits to export', 'error')
-      return
-    }
+  const handleDayExport = useCallback((dayVisits, dateKey) => {
     try {
-      exportVisitsToCSV(toExport)
-      showToast(`Exported ${toExport.length} visit${toExport.length === 1 ? '' : 's'}`, 'success')
+      exportVisitsToCSV(dayVisits, `valley-visits-${dateKey}.csv`)
+      showToast(`Exported ${dayVisits.length} visit${dayVisits.length === 1 ? '' : 's'}`, 'success')
     } catch (e) {
       showToast('Export failed: ' + e.message, 'error')
     }
-  }, [visits, filter, showToast])
+  }, [showToast])
 
-  const filtered = filter === 'All'
-    ? visits
-    : visits.filter(v => v.status === FILTER_KEYS[filter])
+  const filtered = useMemo(() =>
+    filter === 'All' ? visits : visits.filter(v => v.status === FILTER_KEYS[filter]),
+    [visits, filter]
+  )
+
+  const groups = useMemo(() => groupByDay(filtered), [filtered])
 
   return (
     <div className="view-inner">
       <div style={{ paddingTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={{ marginBottom: 4 }}>
           <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>My Visits</span>
-          <button className="btn btn-secondary" onClick={handleExport} style={{ height: 40, fontSize: 13, padding: '0 14px', gap: 6 }}>
-            <IconDownload />
-            Export CSV
-          </button>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>
           {visits.length} total visit{visits.length !== 1 ? 's' : ''}
@@ -241,10 +288,10 @@ export default function VisitList({ showToast }) {
         </div>
       )}
 
-      {!loading && filtered.length > 0 && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          {filtered.map(v => (
-            <VisitItem key={v.id} visit={v} onDelete={handleDelete} />
+      {!loading && groups.length > 0 && (
+        <div style={{ paddingBottom: 16 }}>
+          {groups.map(group => (
+            <DayGroup key={group.key} group={group} onDelete={handleDelete} onExport={handleDayExport} />
           ))}
         </div>
       )}

@@ -1,4 +1,4 @@
-export function exportVisitsToCSV(visits) {
+export function exportVisitsToCSV(visits, filename) {
   const headers = [
     'Date', 'Time', 'Company Name', 'Address', 'Phone', 'Website',
     'Industry', 'Contact Name', 'Status', 'Notes', 'Voice Note'
@@ -28,7 +28,7 @@ export function exportVisitsToCSV(visits) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `valley-visits-${new Date().toISOString().split('T')[0]}.csv`
+  a.download = filename || `valley-visits-${new Date().toISOString().split('T')[0]}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

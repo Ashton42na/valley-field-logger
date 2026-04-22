@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { getAllVisits } from '../db/db.js'
+import { exportVisitsToCSV } from '../utils/csvExport.js'
 
 const IconKey = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -6,6 +8,13 @@ const IconKey = () => (
   </svg>
 )
 
+const IconDownload = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+)
 const IconCheck = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
     <polyline points="20 6 9 17 4 12"/>
@@ -38,6 +47,17 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
     onSavePlacesApiKey(placesDraft.trim())
     showToast('Places API key saved', 'success')
   }
+
+  const handleExportAll = useCallback(async () => {
+    try {
+      const all = await getAllVisits()
+      if (all.length === 0) { showToast('No visits to export', 'error'); return }
+      exportVisitsToCSV(all)
+      showToast(`Exported ${all.length} visit${all.length === 1 ? '' : 's'}`, 'success')
+    } catch (e) {
+      showToast('Export failed: ' + e.message, 'error')
+    }
+  }, [showToast])
 
   return (
     <div className="view-inner">
@@ -112,10 +132,13 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="settings-row">
           <div className="settings-label">Storage</div>
-          <p className="settings-hint" style={{ marginTop: 0 }}>
+          <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
             All visit data is saved locally on this device using IndexedDB. Nothing is uploaded to any server.
-            Use the Export CSV button in My Visits to back up or import into your CRM.
           </p>
+          <button className="btn btn-secondary btn-full" onClick={handleExportAll} style={{ height: 44, fontSize: 14 }}>
+            <IconDownload />
+            Export All Visits as CSV
+          </button>
         </div>
       </div>
 
