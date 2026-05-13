@@ -1,21 +1,54 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'valley-field-logger'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      const store = db.createObjectStore('visits', { keyPath: 'id', autoIncrement: true })
-      store.createIndex('timestamp', 'timestamp')
-      store.createIndex('status', 'status')
+    async upgrade(db, oldVersion, _newVersion, tx) {
+      if (oldVersion < 1) {
+        const store = db.createObjectStore('visits', { keyPath: 'id', autoIncrement: true })
+        store.createIndex('timestamp', 'timestamp')
+        store.createIndex('status', 'status')
+      }
+      if (oldVersion < 2) {
+        const store = tx.objectStore('visits')
+        if (!store.indexNames.contains('syncStatus')) {
+          store.createIndex('syncStatus', 'syncStatus')
+        }
+        // Backfill sync fields on existing rows so they enter the queue
+        let cursor = await store.openCursor()
+        while (cursor) {
+          const v = cursor.value
+          let changed = false
+          if (!v.visitUid) { v.visitUid = generateUid(); changed = true }
+          if (!v.syncStatus) { v.syncStatus = 'pending'; changed = true }
+          if (changed) await cursor.update(v)
+          cursor = await cursor.continue()
+        }
+      }
     }
   })
 }
 
+function generateUid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  // Fallback for older browsers
+  return 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+}
+
 export async function addVisit(visit) {
   const db = await getDB()
-  return db.add('visits', { ...visit, timestamp: Date.now() })
+  const now = Date.now()
+  const enriched = {
+    ...visit,
+    visitUid: visit.visitUid || generateUid(),
+    timestamp: visit.timestamp || now,
+    syncStatus: 'pending',
+    syncedAt: null,
+    syncError: null
+  }
+  return db.add('visits', enriched)
 }
 
 export async function updateVisit(id, changes) {
@@ -33,4 +66,45 @@ export async function getAllVisits() {
 export async function deleteVisit(id) {
   const db = await getDB()
   return db.delete('visits', id)
+}
+
+export async function getPendingSyncVisits() {
+  const db = await getDB()
+  return db.getAllFromIndex('visits', 'syncStatus', 'pending')
+}
+
+export async function countPendingSync() {
+  const db = await getDB()
+  return db.countFromIndex('visits', 'syncStatus', 'pending')
+}
+
+export async function markVisitSynced(id) {
+  const db = await getDB()
+  const v = await db.get('visits', id)
+  if (!v) return
+  v.syncStatus = 'sent'
+  v.syncedAt = Date.now()
+  v.syncError = null
+  return db.put('visits', v)
+}
+
+export async function markVisitSyncFailed(id, error) {
+  const db = await getDB()
+  const v = await db.get('visits', id)
+  if (!v) return
+  v.syncStatus = 'failed'
+  v.syncError = error || 'Unknown error'
+  return db.put('visits', v)
+}
+
+export async function resetFailedToPending() {
+  const db = await getDB()
+  const failed = await db.getAllFromIndex('visits', 'syncStatus', 'failed')
+  const tx = db.transaction('visits', 'readwrite')
+  for (const v of failed) {
+    v.syncStatus = 'pending'
+    v.syncError = null
+    await tx.store.put(v)
+  }
+  await tx.done
 }
