@@ -35,7 +35,7 @@ export function subscribe(fn) {
 function getDeviceId() {
   let id = localStorage.getItem(STORAGE_DEVICE_ID)
   if (!id) {
-    id = (crypto.randomUUID && crypto.randomUUID()) || ('d-' + Date.now().toString(36))
+    id = (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) || ('d-' + Date.now().toString(36))
     localStorage.setItem(STORAGE_DEVICE_ID, id)
   }
   return id
@@ -115,8 +115,9 @@ export async function flush() {
         const r = await postOne(baseUrl, apiKey, v)
         if (r.ok) { await markVisitSynced(v.id); sent++ }
         else      { await markVisitSyncFailed(v.id, r.error); failed++ }
-      } catch (e) {
-        await markVisitSyncFailed(v.id, e.message || 'Network error')
+      } catch {
+        // Transient network / offline error — leave row as pending so the
+        // online-event flush can retry it automatically without manual intervention.
         failed++
       }
     }

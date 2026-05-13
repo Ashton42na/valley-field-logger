@@ -100,7 +100,8 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
     try {
       await resetFailedToPending()
       const r = await flushSync()
-      if (r.error)        showToast(r.error, 'error')
+      if (r.busy)         showToast('Sync already in progress', 'error')
+      else if (r.error)   showToast(r.error, 'error')
       else if (r.failed)  showToast(`Synced ${r.sent}, ${r.failed} failed`, 'error')
       else if (r.sent)    showToast(`Synced ${r.sent} visit${r.sent === 1 ? '' : 's'}`, 'success')
       else                showToast('Nothing to sync', 'success')
