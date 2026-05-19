@@ -8,6 +8,8 @@ const STORAGE_BASE_URL = 'vfl-sync-base-url'
 const STORAGE_API_KEY  = 'vfl-sync-api-key'
 const STORAGE_DEVICE_ID = 'vfl-device-id'
 const STORAGE_LAST_RESULT = 'vfl-sync-last-result'
+const STORAGE_SYNC_LOG = 'vfl-sync-log'
+const MAX_LOG_ENTRIES = 100
 
 let inFlight = false
 let listeners = new Set()
@@ -30,6 +32,22 @@ function setLastResult(result) {
 export function subscribe(fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)
+}
+
+export function getSyncLog() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_SYNC_LOG) || '[]') }
+  catch { return [] }
+}
+
+export function clearSyncLog() {
+  localStorage.setItem(STORAGE_SYNC_LOG, '[]')
+}
+
+function appendSyncLog(entry) {
+  const log = getSyncLog()
+  log.unshift(entry)
+  if (log.length > MAX_LOG_ENTRIES) log.length = MAX_LOG_ENTRIES
+  localStorage.setItem(STORAGE_SYNC_LOG, JSON.stringify(log))
 }
 
 function getDeviceId() {
@@ -102,26 +120,41 @@ export async function flush() {
   const apiKey  = getSyncApiKey()
   if (!baseUrl || !apiKey) {
     const result = { sent: 0, failed: 0, skipped: 0, error: 'Sync URL and API key required', at: Date.now() }
+    appendSyncLog({ at: result.at, sent: 0, failed: 0, error: result.error, visits: [] })
     setLastResult(result)
     return result
   }
 
   inFlight = true
   let sent = 0, failed = 0
+  const visitLog = []
   try {
     const pending = await getPendingSyncVisits()
     for (const v of pending) {
+      const label = v.companyName || v.address || v.visitUid
       try {
         const r = await postOne(baseUrl, apiKey, v)
-        if (r.ok) { await markVisitSynced(v.id); sent++ }
-        else      { await markVisitSyncFailed(v.id, r.error); failed++ }
-      } catch {
+        if (r.ok) {
+          await markVisitSynced(v.id)
+          sent++
+          visitLog.push({ uid: v.visitUid, name: label, outcome: 'sent' })
+        } else {
+          await markVisitSyncFailed(v.id, r.error)
+          failed++
+          visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: r.error })
+        }
+      } catch (e) {
+        const msg = e.message || 'Network error'
         // Transient network / offline error — leave row as pending so the
         // online-event flush can retry it automatically without manual intervention.
         failed++
+        visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: msg })
       }
     }
     const result = { sent, failed, skipped: 0, at: Date.now() }
+    if (visitLog.length > 0) {
+      appendSyncLog({ at: result.at, sent, failed, error: null, visits: visitLog })
+    }
     setLastResult(result)
     return result
   } finally {

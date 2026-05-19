@@ -4,7 +4,8 @@ import { exportVisitsToCSV } from '../utils/csvExport.js'
 import {
   getSyncBaseUrl, setSyncBaseUrl,
   getSyncApiKey, setSyncApiKey,
-  getLastResult, subscribe, flush as flushSync
+  getLastResult, subscribe, flush as flushSync,
+  getSyncLog, clearSyncLog
 } from '../sync/syncService.js'
 
 const IconKey = () => (
@@ -71,16 +72,20 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
   const [syncPending, setSyncPending] = useState(0)
   const [syncLast, setSyncLast] = useState(getLastResult())
   const [syncing, setSyncing] = useState(false)
+  const [showLogModal, setShowLogModal] = useState(false)
+  const [syncLog, setSyncLog] = useState(() => getSyncLog())
 
   const refreshPending = useCallback(async () => {
     try { setSyncPending(await countPendingSync()) } catch {}
   }, [])
 
+  const refreshLog = useCallback(() => { setSyncLog(getSyncLog()) }, [])
+
   useEffect(() => {
     refreshPending()
-    const unsub = subscribe((r) => { setSyncLast(r); refreshPending() })
+    const unsub = subscribe((r) => { setSyncLast(r); refreshPending(); refreshLog() })
     return unsub
-  }, [refreshPending])
+  }, [refreshPending, refreshLog])
 
   const syncUrlChanged = syncUrlDraft !== getSyncBaseUrl()
   const syncKeyChanged = syncKeyDraft !== getSyncApiKey()
@@ -273,12 +278,124 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
               ? <span className="spinner" style={{ borderColor: 'rgba(96,99,122,0.3)', borderTopColor: 'var(--text2)' }} />
               : 'Sync Now'}
           </button>
+          <button
+            className="btn btn-secondary btn-full"
+            onClick={() => { setSyncLog(getSyncLog()); setShowLogModal(true) }}
+            style={{ height: 40, fontSize: 13, marginTop: 8 }}
+          >
+            View Sync Log
+          </button>
           <p className="settings-hint">
             Visits also sync automatically after save and when the device comes back online.
             Configure the tracker URL and API key issued for this device.
           </p>
         </div>
       </div>
+
+      {/* Sync Log Modal */}
+      {showLogModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowLogModal(false) }}
+        >
+          <div style={{
+            background: 'var(--card)',
+            borderRadius: '16px 16px 0 0',
+            width: '100%', maxWidth: 560,
+            maxHeight: '80vh',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Modal header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px 16px 12px',
+              borderBottom: '1px solid var(--border)'
+            }}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Sync Log</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {syncLog.length > 0 && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ height: 32, fontSize: 12, padding: '0 12px' }}
+                    onClick={() => { clearSyncLog(); setSyncLog([]) }}
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  className="btn btn-icon"
+                  onClick={() => setShowLogModal(false)}
+                  aria-label="Close"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 18, height: 18 }}>
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal body */}
+            <div style={{ overflowY: 'auto', padding: '12px 16px 24px', flex: 1 }}>
+              {syncLog.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text2)', fontSize: 14, marginTop: 24 }}>
+                  No sync events recorded yet.
+                </p>
+              ) : (
+                syncLog.map((entry, i) => {
+                  const d = new Date(entry.at)
+                  const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                  const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  return (
+                    <div key={i} style={{
+                      borderBottom: i < syncLog.length - 1 ? '1px solid var(--border)' : 'none',
+                      paddingBottom: 12, marginBottom: 12
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text2)' }}>{dateStr} {timeStr}</span>
+                        <span style={{ fontSize: 12 }}>
+                          {entry.sent > 0 && (
+                            <span style={{ color: 'var(--green)', marginRight: 8 }}>↑ Sent: {entry.sent}</span>
+                          )}
+                          {entry.failed > 0 && (
+                            <span style={{ color: 'var(--red)' }}>✗ Failed: {entry.failed}</span>
+                          )}
+                          {entry.sent === 0 && entry.failed === 0 && !entry.error && (
+                            <span style={{ color: 'var(--text2)' }}>Nothing to sync</span>
+                          )}
+                        </span>
+                      </div>
+                      {entry.error && (
+                        <p style={{ fontSize: 12, color: 'var(--red)', margin: '2px 0 4px' }}>{entry.error}</p>
+                      )}
+                      {entry.visits && entry.visits.length > 0 && (
+                        <div style={{ marginTop: 4 }}>
+                          {entry.visits.map((v, j) => (
+                            <div key={j} style={{
+                              fontSize: 12, display: 'flex', alignItems: 'center', gap: 6,
+                              color: v.outcome === 'sent' ? 'var(--text)' : 'var(--red)',
+                              padding: '2px 0'
+                            }}>
+                              <span style={{ opacity: 0.5 }}>{v.outcome === 'sent' ? '↑' : '✗'}</span>
+                              <span style={{ flex: 1 }}>{v.name}</span>
+                              {v.error && <span style={{ opacity: 0.7, fontSize: 11 }}>{v.error}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Google Places API key */}
       <p className="section-title" style={{ marginBottom: 10 }}>Business Search</p>
