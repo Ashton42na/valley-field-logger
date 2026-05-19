@@ -378,10 +378,10 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
                           {entry.visits.map((v, j) => (
                             <div key={j} style={{
                               fontSize: 12, display: 'flex', alignItems: 'center', gap: 6,
-                              color: v.outcome === 'sent' ? 'var(--text)' : 'var(--red)',
+                              color: v.outcome === 'sent' ? 'var(--text)' : v.outcome === 'retry' ? 'var(--orange, #f97316)' : 'var(--red)',
                               padding: '2px 0'
                             }}>
-                              <span style={{ opacity: 0.5 }}>{v.outcome === 'sent' ? '↑' : '✗'}</span>
+                              <span style={{ opacity: 0.5 }}>{v.outcome === 'sent' ? '↑' : v.outcome === 'retry' ? '↻' : '✗'}</span>
                               <span style={{ flex: 1 }}>{v.name}</span>
                               {v.error && <span style={{ opacity: 0.7, fontSize: 11 }}>{v.error}</span>}
                             </div>
