@@ -1,6 +1,8 @@
 import {
   getPendingSyncVisits,
+  getVisit,
   markVisitSynced,
+  markVisitSyncRetry,
   markVisitSyncFailed
 } from '../db/db.js'
 
@@ -10,12 +12,34 @@ const STORAGE_DEVICE_ID = 'vfl-device-id'
 const STORAGE_LAST_RESULT = 'vfl-sync-last-result'
 const STORAGE_SYNC_LOG = 'vfl-sync-log'
 const MAX_LOG_ENTRIES = 100
+const MAX_SYNC_ATTEMPTS = 5
+const BASE_BACKOFF_MS = 1000
+const MAX_BACKOFF_MS  = 5 * 60 * 1000
+const DEFAULT_FLUSH_DEBOUNCE_MS = 500
 
 let inFlight = false
+let pendingRerun = false
+let flushTimer = null
 let listeners = new Set()
 
+function isValidSyncUrl(v) {
+  if (!v) return false
+  try {
+    const u = new URL(v)
+    if (u.protocol === 'https:') return true
+    if (u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return true
+    return false
+  } catch { return false }
+}
+
 export function getSyncBaseUrl() { return localStorage.getItem(STORAGE_BASE_URL) || '' }
-export function setSyncBaseUrl(v) { localStorage.setItem(STORAGE_BASE_URL, (v || '').trim()) }
+export function setSyncBaseUrl(v) {
+  const trimmed = (v || '').trim()
+  if (trimmed && !isValidSyncUrl(trimmed)) {
+    throw new Error('Sync URL must use https:// (or http://localhost for dev)')
+  }
+  localStorage.setItem(STORAGE_BASE_URL, trimmed)
+}
 export function getSyncApiKey()  { return localStorage.getItem(STORAGE_API_KEY)  || '' }
 export function setSyncApiKey(v) { localStorage.setItem(STORAGE_API_KEY, (v || '').trim()) }
 
@@ -57,6 +81,22 @@ function getDeviceId() {
     localStorage.setItem(STORAGE_DEVICE_ID, id)
   }
   return id
+}
+
+function backoffMs(attempts) {
+  return Math.min(BASE_BACKOFF_MS * Math.pow(2, Math.max(0, attempts - 1)), MAX_BACKOFF_MS)
+}
+
+// Tracker is user-configured and untrusted — sanitize any error body before
+// we persist it to localStorage or render it. Strip control chars, cap length,
+// and redact the API key in case the server echoes it back.
+function sanitizeError(text, apiKey) {
+  if (!text) return ''
+  let s = String(text).replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 80)
+  if (apiKey && apiKey.length >= 8) {
+    s = s.split(apiKey).join('[redacted]')
+  }
+  return s.trim()
 }
 
 // Wire format consumed downstream by AuditITClone's FieldVisitMatchLogic. Field-value
@@ -105,59 +145,107 @@ async function postOne(baseUrl, apiKey, visit) {
   })
   // 200 OK or 409 (duplicate) both count as "delivered"
   if (res.ok || res.status === 409) return { ok: true }
+  // Don't persist server text on auth failures — the response may echo the key.
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: `HTTP ${res.status}` }
+  }
   let detail = ''
-  try { detail = (await res.text()).slice(0, 200) } catch {}
+  try { detail = sanitizeError(await res.text(), apiKey) } catch {}
   return { ok: false, error: `HTTP ${res.status}${detail ? ': ' + detail : ''}` }
 }
 
 /**
- * Walk pending rows and POST each. Marks rows synced or failed.
- * Returns a summary { sent, failed, skipped, error? }.
+ * Debounced flush. Use this for triggers that can fire in bursts (per-save,
+ * online events) to coalesce them into a single flush.
+ */
+export function scheduleFlush(delay = DEFAULT_FLUSH_DEBOUNCE_MS) {
+  if (flushTimer) clearTimeout(flushTimer)
+  flushTimer = setTimeout(() => {
+    flushTimer = null
+    flush().catch(() => {})
+  }, delay)
+}
+
+/**
+ * Walk pending rows and POST each. Marks rows synced, scheduled for retry,
+ * or permanently failed. Returns a summary { sent, failed, skipped, busy?, error? }.
  */
 export async function flush() {
-  if (inFlight) return { sent: 0, failed: 0, skipped: 0, busy: true }
+  if (inFlight) {
+    // Another flush is mid-flight. Schedule one more after it completes so
+    // newly-saved or newly-reset rows don't get stranded on a stale snapshot.
+    pendingRerun = true
+    return { sent: 0, failed: 0, retried: 0, skipped: 0, busy: true }
+  }
   const baseUrl = getSyncBaseUrl()
   const apiKey  = getSyncApiKey()
   if (!baseUrl || !apiKey) {
-    const result = { sent: 0, failed: 0, skipped: 0, error: 'Sync URL and API key required', at: Date.now() }
-    appendSyncLog({ at: result.at, sent: 0, failed: 0, error: result.error, visits: [] })
+    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Sync URL and API key required', at: Date.now() }
+    setLastResult(result)
+    return result
+  }
+  if (!isValidSyncUrl(baseUrl)) {
+    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Sync URL is invalid or not HTTPS', at: Date.now() }
     setLastResult(result)
     return result
   }
 
   inFlight = true
-  let sent = 0, failed = 0
+  let sent = 0, failed = 0, retried = 0, skipped = 0
   const visitLog = []
   try {
     const pending = await getPendingSyncVisits()
-    for (const v of pending) {
+    const now = Date.now()
+    for (const snap of pending) {
+      // Re-fetch so we POST the user's latest edits, not the stale snapshot.
+      const v = await getVisit(snap.id)
+      if (!v || v.syncStatus !== 'pending') continue
+      // Honor backoff window.
+      if (v.nextRetryAt && v.nextRetryAt > now) {
+        skipped++
+        continue
+      }
       const label = v.companyName || v.address || v.visitUid
+      const attempts = (v.syncAttempts || 0) + 1
       try {
         const r = await postOne(baseUrl, apiKey, v)
         if (r.ok) {
           await markVisitSynced(v.id)
           sent++
           visitLog.push({ uid: v.visitUid, name: label, outcome: 'sent' })
-        } else {
-          await markVisitSyncFailed(v.id, r.error)
+        } else if (attempts >= MAX_SYNC_ATTEMPTS) {
+          await markVisitSyncFailed(v.id, r.error, attempts)
           failed++
           visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: r.error })
+        } else {
+          await markVisitSyncRetry(v.id, r.error, attempts, now + backoffMs(attempts))
+          retried++
+          visitLog.push({ uid: v.visitUid, name: label, outcome: 'retry', error: r.error })
         }
       } catch (e) {
         const msg = e.message || 'Network error'
-        // Transient network / offline error — leave row as pending so the
-        // online-event flush can retry it automatically without manual intervention.
-        failed++
-        visitLog.push({ uid: v.visitUid, name: label, outcome: 'retry', error: msg })
+        if (attempts >= MAX_SYNC_ATTEMPTS) {
+          await markVisitSyncFailed(v.id, msg, attempts)
+          failed++
+          visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: msg })
+        } else {
+          await markVisitSyncRetry(v.id, msg, attempts, now + backoffMs(attempts))
+          retried++
+          visitLog.push({ uid: v.visitUid, name: label, outcome: 'retry', error: msg })
+        }
       }
     }
-    const result = { sent, failed, skipped: 0, at: Date.now() }
+    const result = { sent, failed, retried, skipped, at: Date.now() }
     if (visitLog.length > 0) {
-      appendSyncLog({ at: result.at, sent, failed, error: null, visits: visitLog })
+      appendSyncLog({ at: result.at, sent, failed, retried, error: null, visits: visitLog })
     }
     setLastResult(result)
     return result
   } finally {
     inFlight = false
+    if (pendingRerun) {
+      pendingRerun = false
+      scheduleFlush(100)
+    }
   }
 }

@@ -91,9 +91,13 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
   const syncKeyChanged = syncKeyDraft !== getSyncApiKey()
 
   const handleSaveSyncUrl = () => {
-    setSyncBaseUrl(syncUrlDraft.trim())
-    setSyncUrlDraft(getSyncBaseUrl())
-    showToast('Sync URL saved', 'success')
+    try {
+      setSyncBaseUrl(syncUrlDraft.trim())
+      setSyncUrlDraft(getSyncBaseUrl())
+      showToast('Sync URL saved', 'success')
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
   }
   const handleSaveSyncKey = () => {
     setSyncApiKey(syncKeyDraft.trim())
@@ -105,9 +109,10 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
     try {
       await resetFailedToPending()
       const r = await flushSync()
-      if (r.busy)         showToast('Sync already in progress', 'error')
+      if (r.busy)         showToast('Sync queued — runs after current sync', 'success')
       else if (r.error)   showToast(r.error, 'error')
-      else if (r.failed)  showToast(`Synced ${r.sent}, ${r.failed} failed`, 'error')
+      else if (r.failed)  showToast(`Synced ${r.sent}, ${r.failed} failed${r.retried ? `, ${r.retried} retrying` : ''}`, 'error')
+      else if (r.retried) showToast(`Synced ${r.sent}, ${r.retried} will retry`, 'success')
       else if (r.sent)    showToast(`Synced ${r.sent} visit${r.sent === 1 ? '' : 's'}`, 'success')
       else                showToast('Nothing to sync', 'success')
       await refreshPending()
@@ -264,7 +269,7 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
               {syncLast?.error
                 ? <span style={{ color: 'var(--red)' }}>Last: {syncLast.error}</span>
                 : syncLast
-                  ? <span>Last: sent {syncLast.sent}{syncLast.failed ? `, ${syncLast.failed} failed` : ''}</span>
+                  ? <span>Last: sent {syncLast.sent}{syncLast.failed ? `, ${syncLast.failed} failed` : ''}{syncLast.retried ? `, ${syncLast.retried} retrying` : ''}</span>
                   : <span>Never synced</span>}
             </span>
           </div>
@@ -363,9 +368,12 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
                             <span style={{ color: 'var(--green)', marginRight: 8 }}>↑ Sent: {entry.sent}</span>
                           )}
                           {entry.failed > 0 && (
-                            <span style={{ color: 'var(--red)' }}>✗ Failed: {entry.failed}</span>
+                            <span style={{ color: 'var(--red)', marginRight: 8 }}>✗ Failed: {entry.failed}</span>
                           )}
-                          {entry.sent === 0 && entry.failed === 0 && !entry.error && (
+                          {entry.retried > 0 && (
+                            <span style={{ color: 'var(--text2)' }}>↻ Retrying: {entry.retried}</span>
+                          )}
+                          {entry.sent === 0 && entry.failed === 0 && !entry.retried && !entry.error && (
                             <span style={{ color: 'var(--text2)' }}>Nothing to sync</span>
                           )}
                         </span>

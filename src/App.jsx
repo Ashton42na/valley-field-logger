@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import SearchView from './components/SearchView.jsx'
 import VisitForm from './components/VisitForm.jsx'
 import VisitList from './components/VisitList.jsx'
 import Settings from './components/Settings.jsx'
-import { flush as flushSync } from './sync/syncService.js'
+import { scheduleFlush } from './sync/syncService.js'
 
 const IconSearch = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -39,7 +39,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('vfl-anthropic-key') || '')
   const [placesApiKey, setPlacesApiKey] = useState(() => localStorage.getItem('vfl-google-places-key') || '')
   const [toast, setToast] = useState(null)
-  const toastTimer = { current: null }
+  const toastTimer = useRef(null)
 
   const showToast = useCallback((text, type = 'success') => {
     clearTimeout(toastTimer.current)
@@ -50,9 +50,9 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const onOnline = () => { flushSync().catch(() => {}) }
+    const onOnline = () => scheduleFlush(1500)
     window.addEventListener('online', onOnline)
-    if (navigator.onLine) onOnline()
+    if (navigator.onLine) scheduleFlush(1500)
     return () => window.removeEventListener('online', onOnline)
   }, [])
 

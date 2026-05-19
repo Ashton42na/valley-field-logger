@@ -68,6 +68,11 @@ export async function deleteVisit(id) {
   return db.delete('visits', id)
 }
 
+export async function getVisit(id) {
+  const db = await getDB()
+  return db.get('visits', id)
+}
+
 export async function getPendingSyncVisits() {
   const db = await getDB()
   return db.getAllFromIndex('visits', 'syncStatus', 'pending')
@@ -85,15 +90,30 @@ export async function markVisitSynced(id) {
   v.syncStatus = 'sent'
   v.syncedAt = Date.now()
   v.syncError = null
+  v.syncAttempts = 0
+  v.nextRetryAt = null
   return db.put('visits', v)
 }
 
-export async function markVisitSyncFailed(id, error) {
+export async function markVisitSyncRetry(id, error, attempts, nextRetryAt) {
+  const db = await getDB()
+  const v = await db.get('visits', id)
+  if (!v) return
+  v.syncStatus = 'pending'
+  v.syncError = error || 'Unknown error'
+  v.syncAttempts = attempts
+  v.nextRetryAt = nextRetryAt
+  return db.put('visits', v)
+}
+
+export async function markVisitSyncFailed(id, error, attempts) {
   const db = await getDB()
   const v = await db.get('visits', id)
   if (!v) return
   v.syncStatus = 'failed'
   v.syncError = error || 'Unknown error'
+  if (typeof attempts === 'number') v.syncAttempts = attempts
+  v.nextRetryAt = null
   return db.put('visits', v)
 }
 
@@ -104,6 +124,8 @@ export async function resetFailedToPending() {
   for (const v of failed) {
     v.syncStatus = 'pending'
     v.syncError = null
+    v.syncAttempts = 0
+    v.nextRetryAt = null
     await tx.store.put(v)
   }
   await tx.done

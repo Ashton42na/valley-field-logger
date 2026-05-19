@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { addVisit } from '../db/db.js'
-import { flush as flushSync } from '../sync/syncService.js'
+import { scheduleFlush } from '../sync/syncService.js'
 import VoiceNote from './VoiceNote.jsx'
 import { scanBusinessCard } from '../utils/anthropic.js'
 
@@ -80,8 +80,8 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     followUpDate: '',
     notes: '',
     voiceNote: '',
-    lat: b.lat || null,
-    lon: b.lon || null
+    lat: typeof b.lat === 'number' ? b.lat : null,
+    lon: typeof b.lon === 'number' ? b.lon : null
   })
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -141,7 +141,7 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     setSaving(true)
     try {
       await addVisit(form)
-      flushSync().catch(() => {})
+      scheduleFlush()
       onSaved()
     } catch (e) {
       showToast('Failed to save: ' + e.message, 'error')
