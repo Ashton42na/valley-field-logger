@@ -3,6 +3,7 @@ import SearchView from './components/SearchView.jsx'
 import VisitForm from './components/VisitForm.jsx'
 import VisitList from './components/VisitList.jsx'
 import Settings from './components/Settings.jsx'
+import { flush as flushSync } from './sync/syncService.js'
 
 const IconSearch = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -46,6 +47,13 @@ export default function App() {
     toastTimer.current = setTimeout(() => {
       setToast(t => t ? { ...t, show: false } : null)
     }, 2200)
+  }, [])
+
+  useEffect(() => {
+    const onOnline = () => { flushSync().catch(() => {}) }
+    window.addEventListener('online', onOnline)
+    if (navigator.onLine) onOnline()
+    return () => window.removeEventListener('online', onOnline)
   }, [])
 
   const saveApiKey = useCallback((key) => {

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { addVisit } from '../db/db.js'
+import { flush as flushSync } from '../sync/syncService.js'
 import VoiceNote from './VoiceNote.jsx'
 import { scanBusinessCard } from '../utils/anthropic.js'
 
@@ -140,6 +141,7 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     setSaving(true)
     try {
       await addVisit(form)
+      flushSync().catch(() => {})
       onSaved()
     } catch (e) {
       showToast('Failed to save: ' + e.message, 'error')

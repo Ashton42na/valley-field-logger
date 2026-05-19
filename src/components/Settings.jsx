@@ -1,6 +1,11 @@
-import { useState, useCallback } from 'react'
-import { getAllVisits } from '../db/db.js'
+import { useState, useCallback, useEffect } from 'react'
+import { getAllVisits, countPendingSync, resetFailedToPending } from '../db/db.js'
 import { exportVisitsToCSV } from '../utils/csvExport.js'
+import {
+  getSyncBaseUrl, setSyncBaseUrl,
+  getSyncApiKey, setSyncApiKey,
+  getLastResult, subscribe, flush as flushSync
+} from '../sync/syncService.js'
 
 const IconKey = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -58,6 +63,55 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
       showToast('Export failed: ' + e.message, 'error')
     }
   }, [showToast])
+
+  // Sync settings
+  const [syncUrlDraft, setSyncUrlDraft] = useState(getSyncBaseUrl())
+  const [syncKeyDraft, setSyncKeyDraft] = useState(getSyncApiKey())
+  const [showSyncKey, setShowSyncKey] = useState(false)
+  const [syncPending, setSyncPending] = useState(0)
+  const [syncLast, setSyncLast] = useState(getLastResult())
+  const [syncing, setSyncing] = useState(false)
+
+  const refreshPending = useCallback(async () => {
+    try { setSyncPending(await countPendingSync()) } catch {}
+  }, [])
+
+  useEffect(() => {
+    refreshPending()
+    const unsub = subscribe((r) => { setSyncLast(r); refreshPending() })
+    return unsub
+  }, [refreshPending])
+
+  const syncUrlChanged = syncUrlDraft !== getSyncBaseUrl()
+  const syncKeyChanged = syncKeyDraft !== getSyncApiKey()
+
+  const handleSaveSyncUrl = () => {
+    setSyncBaseUrl(syncUrlDraft.trim())
+    setSyncUrlDraft(getSyncBaseUrl())
+    showToast('Sync URL saved', 'success')
+  }
+  const handleSaveSyncKey = () => {
+    setSyncApiKey(syncKeyDraft.trim())
+    setSyncKeyDraft(getSyncApiKey())
+    showToast('Sync API key saved', 'success')
+  }
+  const handleSyncNow = async () => {
+    setSyncing(true)
+    try {
+      await resetFailedToPending()
+      const r = await flushSync()
+      if (r.busy)         showToast('Sync already in progress', 'error')
+      else if (r.error)   showToast(r.error, 'error')
+      else if (r.failed)  showToast(`Synced ${r.sent}, ${r.failed} failed`, 'error')
+      else if (r.sent)    showToast(`Synced ${r.sent} visit${r.sent === 1 ? '' : 's'}`, 'success')
+      else                showToast('Nothing to sync', 'success')
+      await refreshPending()
+    } catch (e) {
+      showToast('Sync failed: ' + e.message, 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <div className="view-inner">
@@ -133,12 +187,96 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
         <div className="settings-row">
           <div className="settings-label">Storage</div>
           <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
-            All visit data is saved locally on this device using IndexedDB. Nothing is uploaded to any server.
+            Visits are saved locally on this device. When sync is configured below, new visits also upload to the central tracker.
           </p>
           <button className="btn btn-secondary btn-full" onClick={handleExportAll} style={{ height: 44, fontSize: 14 }}>
             <IconDownload />
             Export All Visits as CSV
           </button>
+        </div>
+      </div>
+
+      {/* Sync */}
+      <p className="section-title" style={{ marginBottom: 10 }}>Sync to Tracker</p>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="settings-row">
+          <div className="settings-label">Tracker URL</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="form-input"
+              type="url"
+              value={syncUrlDraft}
+              onChange={e => setSyncUrlDraft(e.target.value)}
+              placeholder="https://tracker.example.com"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ fontSize: 14, flex: 1 }}
+            />
+          </div>
+          {syncUrlChanged && (
+            <button className="btn btn-primary btn-full" onClick={handleSaveSyncUrl} style={{ height: 44, marginBottom: 12 }}>
+              <IconCheck /> Save URL
+            </button>
+          )}
+
+          <div className="settings-label" style={{ marginTop: 4 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconKey /> API Key</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="form-input"
+              type={showSyncKey ? 'text' : 'password'}
+              value={syncKeyDraft}
+              onChange={e => setSyncKeyDraft(e.target.value)}
+              placeholder="X-API-KEY value"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ fontFamily: showSyncKey ? 'monospace' : 'inherit', fontSize: 14, flex: 1 }}
+            />
+            <button
+              className="btn btn-icon"
+              onClick={() => setShowSyncKey(v => !v)}
+              aria-label={showSyncKey ? 'Hide key' : 'Show key'}
+              style={{ flexShrink: 0 }}
+            >
+              {showSyncKey
+                ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              }
+            </button>
+          </div>
+          {syncKeyChanged && (
+            <button className="btn btn-primary btn-full" onClick={handleSaveSyncKey} style={{ height: 44, marginBottom: 12 }}>
+              <IconCheck /> Save Key
+            </button>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0', fontSize: 13, color: 'var(--text2)' }}>
+            <span>Pending: <strong>{syncPending}</strong></span>
+            <span>
+              {syncLast?.error
+                ? <span style={{ color: 'var(--red)' }}>Last: {syncLast.error}</span>
+                : syncLast
+                  ? <span>Last: sent {syncLast.sent}{syncLast.failed ? `, ${syncLast.failed} failed` : ''}</span>
+                  : <span>Never synced</span>}
+            </span>
+          </div>
+          <button
+            className="btn btn-secondary btn-full"
+            onClick={handleSyncNow}
+            disabled={syncing}
+            style={{ height: 44, fontSize: 14 }}
+          >
+            {syncing
+              ? <span className="spinner" style={{ borderColor: 'rgba(96,99,122,0.3)', borderTopColor: 'var(--text2)' }} />
+              : 'Sync Now'}
+          </button>
+          <p className="settings-hint">
+            Visits also sync automatically after save and when the device comes back online.
+            Configure the tracker URL and API key issued for this device.
+          </p>
         </div>
       </div>
 
