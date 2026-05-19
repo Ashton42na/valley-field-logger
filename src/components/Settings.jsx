@@ -91,9 +91,13 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
   const syncKeyChanged = syncKeyDraft !== getSyncApiKey()
 
   const handleSaveSyncUrl = () => {
-    setSyncBaseUrl(syncUrlDraft.trim())
-    setSyncUrlDraft(getSyncBaseUrl())
-    showToast('Sync URL saved', 'success')
+    try {
+      setSyncBaseUrl(syncUrlDraft.trim())
+      setSyncUrlDraft(getSyncBaseUrl())
+      showToast('Sync URL saved', 'success')
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
   }
   const handleSaveSyncKey = () => {
     setSyncApiKey(syncKeyDraft.trim())
@@ -105,7 +109,7 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
     try {
       await resetFailedToPending()
       const r = await flushSync()
-      if (r.busy)         showToast('Sync already in progress', 'error')
+      if (r.busy)         showToast('Sync queued — runs after current sync', 'success')
       else if (r.error)   showToast(r.error, 'error')
       else if (r.failed)  showToast(`Synced ${r.sent}, ${r.failed} failed`, 'error')
       else if (r.sent)    showToast(`Synced ${r.sent} visit${r.sent === 1 ? '' : 's'}`, 'success')
