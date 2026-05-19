@@ -175,18 +175,23 @@ export async function flush() {
     // Another flush is mid-flight. Schedule one more after it completes so
     // newly-saved or newly-reset rows don't get stranded on a stale snapshot.
     pendingRerun = true
-    return { sent: 0, failed: 0, skipped: 0, busy: true }
+    return { sent: 0, failed: 0, retried: 0, skipped: 0, busy: true }
   }
   const baseUrl = getSyncBaseUrl()
   const apiKey  = getSyncApiKey()
   if (!baseUrl || !apiKey) {
-    const result = { sent: 0, failed: 0, skipped: 0, error: 'Sync URL and API key required', at: Date.now() }
+    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Sync URL and API key required', at: Date.now() }
+    setLastResult(result)
+    return result
+  }
+  if (!isValidSyncUrl(baseUrl)) {
+    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Sync URL is invalid or not HTTPS', at: Date.now() }
     setLastResult(result)
     return result
   }
 
   inFlight = true
-  let sent = 0, failed = 0, skipped = 0
+  let sent = 0, failed = 0, retried = 0, skipped = 0
   const visitLog = []
   try {
     const pending = await getPendingSyncVisits()
@@ -214,7 +219,7 @@ export async function flush() {
           visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: r.error })
         } else {
           await markVisitSyncRetry(v.id, r.error, attempts, now + backoffMs(attempts))
-          failed++
+          retried++
           visitLog.push({ uid: v.visitUid, name: label, outcome: 'retry', error: r.error })
         }
       } catch (e) {
@@ -225,14 +230,14 @@ export async function flush() {
           visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: msg })
         } else {
           await markVisitSyncRetry(v.id, msg, attempts, now + backoffMs(attempts))
-          failed++
+          retried++
           visitLog.push({ uid: v.visitUid, name: label, outcome: 'retry', error: msg })
         }
       }
     }
-    const result = { sent, failed, skipped, at: Date.now() }
+    const result = { sent, failed, retried, skipped, at: Date.now() }
     if (visitLog.length > 0) {
-      appendSyncLog({ at: result.at, sent, failed, error: null, visits: visitLog })
+      appendSyncLog({ at: result.at, sent, failed, retried, error: null, visits: visitLog })
     }
     setLastResult(result)
     return result
