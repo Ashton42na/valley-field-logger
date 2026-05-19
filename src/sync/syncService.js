@@ -148,7 +148,7 @@ export async function flush() {
         // Transient network / offline error — leave row as pending so the
         // online-event flush can retry it automatically without manual intervention.
         failed++
-        visitLog.push({ uid: v.visitUid, name: label, outcome: 'failed', error: msg })
+        visitLog.push({ uid: v.visitUid, name: label, outcome: 'retry', error: msg })
       }
     }
     const result = { sent, failed, skipped: 0, at: Date.now() }
