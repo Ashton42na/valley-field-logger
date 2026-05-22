@@ -34,7 +34,7 @@ export async function searchByName(query, apiKey) {
   return (data.places || []).map(mapPlace)
 }
 
-export async function findNearby(lat, lon, apiKey, radiusMeters = 800) {
+export async function findNearby(lat, lon, apiKey, radiusMeters = 100) {
   if (!apiKey) throw new Error('Google Places API key not set — add it in Settings.')
   const res = await fetch(`${PLACES_BASE}/places:searchNearby`, {
     method: 'POST',
