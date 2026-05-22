@@ -63,6 +63,11 @@ const IconCamera = () => (
   </svg>
 )
 
+function toDatetimeLocal(date) {
+  const pad = n => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 const NOTE_TEMPLATES = [
   'Left marketing materials with front desk',
   'Outsources IT — potential opportunity',
@@ -83,6 +88,7 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     contactName: '',
     contactTitle: '',
     email: '',
+    visitedAt: toDatetimeLocal(new Date()),
     status: 'visited',
     temperature: '',
     outcome: '',
@@ -168,7 +174,7 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     }
     setSaving(true)
     try {
-      await addVisit(form)
+      await addVisit({ ...form, timestamp: new Date(form.visitedAt).getTime() })
       scheduleFlush()
       onSaved()
     } catch (e) {
@@ -200,8 +206,19 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
       <div className="view">
         <div className="view-inner" style={{ paddingBottom: 32 }}>
 
+          {/* Visit date & time */}
+          <div className="form-group" style={{ marginTop: 16 }}>
+            <label className="form-label">Visit Date &amp; Time</label>
+            <input
+              className="form-input"
+              type="datetime-local"
+              value={form.visitedAt}
+              onChange={set('visitedAt')}
+            />
+          </div>
+
           {/* Business info */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, marginBottom: 8 }}>
             <p className="section-title" style={{ margin: 0 }}>Business Info</p>
             <button
               className="btn btn-icon"
