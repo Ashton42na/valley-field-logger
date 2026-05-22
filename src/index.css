@@ -840,6 +840,34 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   margin-bottom: 12px;
 }
 
+.note-templates {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.note-templates::-webkit-scrollbar { display: none; }
+
+.note-template-btn {
+  flex-shrink: 0;
+  background: var(--s3);
+  border: 1px solid var(--border-hi);
+  border-radius: 20px;
+  padding: 6px 13px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text2);
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.note-template-btn:active {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green);
+}
+
 .filter-chip {
   font-size: 12px;
   font-weight: 600;

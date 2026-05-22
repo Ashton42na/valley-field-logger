@@ -63,6 +63,15 @@ const IconCamera = () => (
   </svg>
 )
 
+const NOTE_TEMPLATES = [
+  'Left marketing materials with front desk',
+  'Outsources IT — potential opportunity',
+  'In-house IT — not a fit at this time',
+  'Corporate IT — decisions made at HQ',
+  'Spoke with owner/decision maker',
+  'Not interested at this time',
+]
+
 export default function VisitForm({ business, apiKey, onSaved, onCancel, showToast }) {
   const b = business || {}
   const [form, setForm] = useState({
@@ -85,7 +94,26 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
   })
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
+  const [notesFocused, setNotesFocused] = useState(false)
   const fileInputRef = useRef(null)
+  const notesRef = useRef(null)
+  const notesBlurTimer = useRef(null)
+
+  const handleNotesFocus = () => {
+    clearTimeout(notesBlurTimer.current)
+    setNotesFocused(true)
+  }
+  const handleNotesBlur = () => {
+    notesBlurTimer.current = setTimeout(() => setNotesFocused(false), 200)
+  }
+  const insertTemplate = (text) => {
+    clearTimeout(notesBlurTimer.current)
+    setForm(f => ({ ...f, notes: f.notes ? f.notes + ' ' + text : text }))
+    requestAnimationFrame(() => {
+      notesRef.current?.focus()
+      setNotesFocused(true)
+    })
+  }
 
   const set = (field) => (e) => {
     const val = typeof e === 'string' ? e : e.target.value
@@ -351,12 +379,30 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
           {/* Notes */}
           <p className="section-title">Notes</p>
           <div className="form-group">
+            {notesFocused && (
+              <div className="note-templates">
+                {NOTE_TEMPLATES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className="note-template-btn"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => insertTemplate(t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea
+              ref={notesRef}
               className="form-textarea"
               value={form.notes}
               onChange={set('notes')}
               placeholder="Add any notes about this visit…"
               rows={3}
+              onFocus={handleNotesFocus}
+              onBlur={handleNotesBlur}
             />
           </div>
 
