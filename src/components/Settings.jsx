@@ -4,6 +4,7 @@ import { exportVisitsToCSV } from '../utils/csvExport.js'
 import {
   getSyncBaseUrl, setSyncBaseUrl,
   getSyncApiKey, setSyncApiKey,
+  getFieldLoggerKey, setFieldLoggerKey,
   getLastResult, subscribe, flush as flushSync,
   getSyncLog, clearSyncLog
 } from '../sync/syncService.js'
@@ -69,6 +70,8 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
   const [syncUrlDraft, setSyncUrlDraft] = useState(getSyncBaseUrl())
   const [syncKeyDraft, setSyncKeyDraft] = useState(getSyncApiKey())
   const [showSyncKey, setShowSyncKey] = useState(false)
+  const [fieldLoggerKeyDraft, setFieldLoggerKeyDraft] = useState(getFieldLoggerKey())
+  const [showFieldLoggerKey, setShowFieldLoggerKey] = useState(false)
   const [syncPending, setSyncPending] = useState(0)
   const [syncLast, setSyncLast] = useState(getLastResult())
   const [syncing, setSyncing] = useState(false)
@@ -89,6 +92,7 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
 
   const syncUrlChanged = syncUrlDraft !== getSyncBaseUrl()
   const syncKeyChanged = syncKeyDraft !== getSyncApiKey()
+  const fieldLoggerKeyChanged = fieldLoggerKeyDraft !== getFieldLoggerKey()
 
   const handleSaveSyncUrl = () => {
     try {
@@ -103,6 +107,11 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
     setSyncApiKey(syncKeyDraft.trim())
     setSyncKeyDraft(getSyncApiKey())
     showToast('Sync API key saved', 'success')
+  }
+  const handleSaveFieldLoggerKey = () => {
+    setFieldLoggerKey(fieldLoggerKeyDraft.trim())
+    setFieldLoggerKeyDraft(getFieldLoggerKey())
+    showToast('Field Logger Key saved', 'success')
   }
   const handleSyncNow = async () => {
     setSyncing(true)
@@ -262,6 +271,42 @@ export default function Settings({ apiKey, onSaveApiKey, placesApiKey, onSavePla
               <IconCheck /> Save Key
             </button>
           )}
+
+          <div className="settings-label" style={{ marginTop: 4 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconKey /> Field Logger Key</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="form-input"
+              type={showFieldLoggerKey ? 'text' : 'password'}
+              value={fieldLoggerKeyDraft}
+              onChange={e => setFieldLoggerKeyDraft(e.target.value)}
+              placeholder="flk_… (from the portal)"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ fontFamily: showFieldLoggerKey ? 'monospace' : 'inherit', fontSize: 14, flex: 1 }}
+            />
+            <button
+              className="btn btn-icon"
+              onClick={() => setShowFieldLoggerKey(v => !v)}
+              aria-label={showFieldLoggerKey ? 'Hide key' : 'Show key'}
+              style={{ flexShrink: 0 }}
+            >
+              {showFieldLoggerKey
+                ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              }
+            </button>
+          </div>
+          {fieldLoggerKeyChanged && (
+            <button className="btn btn-primary btn-full" onClick={handleSaveFieldLoggerKey} style={{ height: 44, marginBottom: 12 }}>
+              <IconCheck /> Save Field Logger Key
+            </button>
+          )}
+          <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+            Your personal key from the portal (My Field Logger). Credits the visits you log to you. Optional.
+          </p>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0', fontSize: 13, color: 'var(--text2)' }}>
             <span>Pending: <strong>{syncPending}</strong></span>
