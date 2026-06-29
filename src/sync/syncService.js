@@ -8,6 +8,7 @@ import {
 
 const STORAGE_BASE_URL = 'vfl-sync-base-url'
 const STORAGE_API_KEY  = 'vfl-sync-api-key'
+const STORAGE_FIELD_LOGGER_KEY = 'vfl-field-logger-key'
 const STORAGE_DEVICE_ID = 'vfl-device-id'
 const STORAGE_LAST_RESULT = 'vfl-sync-last-result'
 const STORAGE_SYNC_LOG = 'vfl-sync-log'
@@ -42,6 +43,12 @@ export function setSyncBaseUrl(v) {
 }
 export function getSyncApiKey()  { return localStorage.getItem(STORAGE_API_KEY)  || '' }
 export function setSyncApiKey(v) { localStorage.setItem(STORAGE_API_KEY, (v || '').trim()) }
+
+// Per-tech Field Logger Key, issued by the portal (Settings ▸ My Field Logger). Sent with every visit as
+// loggerRef so the portal credits the visit's activity to this rep. Optional — blank just means the portal
+// falls back to its global sync user.
+export function getFieldLoggerKey()  { return localStorage.getItem(STORAGE_FIELD_LOGGER_KEY)  || '' }
+export function setFieldLoggerKey(v) { localStorage.setItem(STORAGE_FIELD_LOGGER_KEY, (v || '').trim()) }
 
 export function getLastResult() {
   try { return JSON.parse(localStorage.getItem(STORAGE_LAST_RESULT) || 'null') }
@@ -108,10 +115,15 @@ function sanitizeError(text, apiKey) {
 //   outcome     (free text from OUTCOMES list)  → appended to the Activity Notes
 //   notes + voiceNote                           → Activity Notes body
 //   email + contactName/contactTitle + phone    → Contact resolve-or-create
+//   loggerRef (Field Logger Key)                → resolves to the portal User the Activity is credited to
 function buildPayload(v) {
   return {
     visitUid: v.visitUid,
     deviceId: getDeviceId(),
+    // Forward only the NON-SECRET 12-char key prefix (matches the portal's FieldLoggerKey.Prefix /
+    // FieldLoggerKeyHelper.DisplayPrefixLength). The full secret key never leaves the device — the portal
+    // resolves attribution by prefix. Pasting either the full key or just the prefix works (both trim here).
+    loggerRef: getFieldLoggerKey().slice(0, 12) || null,
     capturedAt: v.timestamp ? new Date(v.timestamp).toISOString() : null,
     updatedAt:  v.updatedAt ? new Date(v.updatedAt).toISOString() : null,
     companyName: v.companyName || '',
