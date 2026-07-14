@@ -22,7 +22,6 @@ export const handler = async (event) => {
   }
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY
-  console.log('[places] GOOGLE_PLACES_API_KEY defined:', Boolean(apiKey), apiKey ? `(length ${apiKey.length})` : '')
   if (!apiKey) {
     return { statusCode: 500, body: JSON.stringify({ error: { message: 'Server is missing GOOGLE_PLACES_API_KEY.' } }) }
   }
@@ -40,11 +39,8 @@ export const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: { message: 'Unknown or missing "op".' } }) }
   }
 
-  const url = `${PLACES_BASE}/${path}`
-  console.log('[places] calling URL:', url)
-
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${PLACES_BASE}/${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,16 +50,12 @@ export const handler = async (event) => {
       body: JSON.stringify(requestBody)
     })
     const body = await res.text()
-    if (!res.ok) {
-      console.log('[places] Google error response:', res.status, body)
-    }
     return {
       statusCode: res.status,
       headers: { 'Content-Type': 'application/json' },
       body
     }
-  } catch (e) {
-    console.log('[places] fetch to Google failed:', e.message)
+  } catch {
     return { statusCode: 502, body: JSON.stringify({ error: { message: 'Failed to reach Google Places API.' } }) }
   }
 }
