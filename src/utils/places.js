@@ -1,45 +1,25 @@
-const PLACES_BASE = 'https://places.googleapis.com/v1'
+const PLACES_PROXY = '/.netlify/functions/places'
 
-const FIELD_MASK = [
-  'places.id',
-  'places.displayName',
-  'places.formattedAddress',
-  'places.nationalPhoneNumber',
-  'places.websiteUri',
-  'places.types',
-  'places.primaryTypeDisplayName',
-  'places.location'
-].join(',')
-
-function headers(apiKey) {
-  return {
-    'Content-Type': 'application/json',
-    'X-Goog-Api-Key': apiKey,
-    'X-Goog-FieldMask': FIELD_MASK
-  }
-}
-
-export async function searchByName(query, apiKey) {
-  if (!apiKey) throw new Error('Google Places API key not set — add it in Settings.')
-  const res = await fetch(`${PLACES_BASE}/places:searchText`, {
+export async function searchByName(query) {
+  const res = await fetch(PLACES_PROXY, {
     method: 'POST',
-    headers: headers(apiKey),
-    body: JSON.stringify({ textQuery: query, regionCode: 'US', languageCode: 'en', maxResultCount: 10 })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op: 'searchText', textQuery: query, regionCode: 'US', languageCode: 'en', maxResultCount: 10 })
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message || 'Search failed — check your API key.')
+    throw new Error(err?.error?.message || 'Search failed.')
   }
   const data = await res.json()
   return (data.places || []).map(mapPlace)
 }
 
-export async function findNearby(lat, lon, apiKey, radiusMeters = 100) {
-  if (!apiKey) throw new Error('Google Places API key not set — add it in Settings.')
-  const res = await fetch(`${PLACES_BASE}/places:searchNearby`, {
+export async function findNearby(lat, lon, radiusMeters = 100) {
+  const res = await fetch(PLACES_PROXY, {
     method: 'POST',
-    headers: headers(apiKey),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      op: 'searchNearby',
       locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius: radiusMeters } },
       languageCode: 'en',
       maxResultCount: 20
@@ -47,7 +27,7 @@ export async function findNearby(lat, lon, apiKey, radiusMeters = 100) {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message || 'Nearby search failed — check your API key.')
+    throw new Error(err?.error?.message || 'Nearby search failed.')
   }
   const data = await res.json()
   return (data.places || [])

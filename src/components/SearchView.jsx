@@ -50,7 +50,7 @@ function BizCard({ biz, onSelect }) {
   )
 }
 
-export default function SearchView({ onSelectBusiness, placesApiKey }) {
+export default function SearchView({ onSelectBusiness }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -74,7 +74,7 @@ export default function SearchView({ onSelectBusiness, placesApiKey }) {
       setLoading(true)
       setMode('name')
       try {
-        const res = await searchByName(val, placesApiKey)
+        const res = await searchByName(val)
         setResults(res)
         if (res.length === 0) setError('No results found. Try a different search or use GPS.')
       } catch (e) {
@@ -99,7 +99,7 @@ export default function SearchView({ onSelectBusiness, placesApiKey }) {
         const { latitude, longitude } = pos.coords
         setMode('gps')
         try {
-          const res = await findNearby(latitude, longitude, placesApiKey)
+          const res = await findNearby(latitude, longitude)
           setResults(res)
           if (res.length === 0) setError('No businesses found nearby. Try searching by name instead.')
         } catch (e) {
