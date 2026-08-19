@@ -7,8 +7,11 @@ import {
 } from '../db/db.js'
 
 const STORAGE_BASE_URL = 'vfl-sync-base-url'
-const STORAGE_API_KEY  = 'vfl-sync-api-key'
 const STORAGE_FIELD_LOGGER_KEY = 'vfl-field-logger-key'
+const STORAGE_LEGACY_API_KEY = 'vfl-sync-api-key' // leftover from the shared X-API-KEY era; still sent if present so an old tracker keeps working during rollout
+const DEFAULT_SYNC_URL = 'https://tracker.vtlinsider.com'
+const FIELD_LOGGER_KEY_PREFIX = 'flk_'
+const FIELD_LOGGER_KEY_MIN_LENGTH = 13 // prefix (4) + more than the 12-char display prefix
 const STORAGE_DEVICE_ID = 'vfl-device-id'
 const STORAGE_LAST_RESULT = 'vfl-sync-last-result'
 const STORAGE_SYNC_LOG = 'vfl-sync-log'
@@ -33,22 +36,25 @@ function isValidSyncUrl(v) {
   } catch { return false }
 }
 
-export function getSyncBaseUrl() { return localStorage.getItem(STORAGE_BASE_URL) || '' }
+export function getSyncBaseUrl() { return localStorage.getItem(STORAGE_BASE_URL) || DEFAULT_SYNC_URL }
 export function setSyncBaseUrl(v) {
-  const trimmed = (v || '').trim()
-  if (trimmed && !isValidSyncUrl(trimmed)) {
+  const trimmed = (v || '').trim() || DEFAULT_SYNC_URL
+  if (!isValidSyncUrl(trimmed)) {
     throw new Error('Sync URL must use https:// (or http://localhost for dev)')
   }
   localStorage.setItem(STORAGE_BASE_URL, trimmed)
 }
-export function getSyncApiKey()  { return localStorage.getItem(STORAGE_API_KEY)  || '' }
-export function setSyncApiKey(v) { localStorage.setItem(STORAGE_API_KEY, (v || '').trim()) }
 
-// Per-tech Field Logger Key, issued by the portal (Settings ▸ My Field Logger). Sent with every visit as
-// loggerRef so the portal credits the visit's activity to this rep. Optional — blank just means the portal
-// falls back to its global sync user.
+// Per-tech Field Logger Key, issued by the portal (My Field Logger). This is the ingest credential
+// (X-FIELD-LOGGER-KEY) and the identity the portal credits the visit to. Required for sync.
 export function getFieldLoggerKey()  { return localStorage.getItem(STORAGE_FIELD_LOGGER_KEY)  || '' }
 export function setFieldLoggerKey(v) { localStorage.setItem(STORAGE_FIELD_LOGGER_KEY, (v || '').trim()) }
+
+export function looksLikeFieldLoggerKey(value) {
+  return typeof value === 'string'
+    && value.startsWith(FIELD_LOGGER_KEY_PREFIX)
+    && value.length >= FIELD_LOGGER_KEY_MIN_LENGTH
+}
 
 export function getLastResult() {
   try { return JSON.parse(localStorage.getItem(STORAGE_LAST_RESULT) || 'null') }
@@ -97,11 +103,11 @@ function backoffMs(attempts) {
 // Tracker is user-configured and untrusted — sanitize any error body before
 // we persist it to localStorage or render it. Strip control chars, cap length,
 // and redact the API key in case the server echoes it back.
-function sanitizeError(text, apiKey) {
+function sanitizeError(text, secret) {
   if (!text) return ''
   let s = String(text).replace(/[\x00-\x1F\x7F]+/g, ' ').slice(0, 80)
-  if (apiKey && apiKey.length >= 8) {
-    s = s.split(apiKey).join('[redacted]')
+  if (secret && secret.length >= 8) {
+    s = s.split(secret).join('[redacted]')
   }
   return s.trim()
 }
@@ -123,7 +129,7 @@ function buildPayload(v) {
     // Forward only the NON-SECRET 12-char key prefix (matches the portal's FieldLoggerKey.Prefix /
     // FieldLoggerKeyHelper.DisplayPrefixLength). The full secret key never leaves the device — the portal
     // resolves attribution by prefix. Pasting either the full key or just the prefix works (both trim here).
-    loggerRef: getFieldLoggerKey().slice(0, 12) || null,
+    loggerRef: getFieldLoggerKey().slice(0, 12) || null, // non-secret prefix; the full key goes in the header
     capturedAt: v.timestamp ? new Date(v.timestamp).toISOString() : null,
     updatedAt:  v.updatedAt ? new Date(v.updatedAt).toISOString() : null,
     companyName: v.companyName || '',
@@ -145,14 +151,19 @@ function buildPayload(v) {
   }
 }
 
-async function postOne(baseUrl, apiKey, visit) {
+async function postOne(baseUrl, fieldLoggerKey, visit) {
   const url = baseUrl.replace(/\/+$/, '') + '/api/visits'
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-FIELD-LOGGER-KEY': fieldLoggerKey
+  }
+  // If this device still has the old shared tracker key, send it too so ingest keeps working
+  // against a tracker that has not been upgraded yet. New devices never store this key.
+  const legacyApiKey = (localStorage.getItem(STORAGE_LEGACY_API_KEY) || '').trim()
+  if (legacyApiKey) headers['X-API-KEY'] = legacyApiKey
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': apiKey
-    },
+    headers,
     body: JSON.stringify(buildPayload(visit))
   })
   // 200 OK or 409 (duplicate) both count as "delivered"
@@ -162,7 +173,10 @@ async function postOne(baseUrl, apiKey, visit) {
     return { ok: false, error: `HTTP ${res.status}` }
   }
   let detail = ''
-  try { detail = sanitizeError(await res.text(), apiKey) } catch {}
+  try {
+    detail = sanitizeError(await res.text(), fieldLoggerKey)
+    if (legacyApiKey) detail = sanitizeError(detail, legacyApiKey)
+  } catch {}
   return { ok: false, error: `HTTP ${res.status}${detail ? ': ' + detail : ''}` }
 }
 
@@ -190,9 +204,14 @@ export async function flush() {
     return { sent: 0, failed: 0, retried: 0, skipped: 0, busy: true }
   }
   const baseUrl = getSyncBaseUrl()
-  const apiKey  = getSyncApiKey()
-  if (!baseUrl || !apiKey) {
-    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Sync URL and API key required', at: Date.now() }
+  const fieldLoggerKey = getFieldLoggerKey()
+  if (!baseUrl) {
+    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Tracker URL required', at: Date.now() }
+    setLastResult(result)
+    return result
+  }
+  if (!looksLikeFieldLoggerKey(fieldLoggerKey)) {
+    const result = { sent: 0, failed: 0, retried: 0, skipped: 0, error: 'Field Logger Key required — paste the full flk_ key from the portal', at: Date.now() }
     setLastResult(result)
     return result
   }
@@ -220,7 +239,7 @@ export async function flush() {
       const label = v.companyName || v.address || v.visitUid
       const attempts = (v.syncAttempts || 0) + 1
       try {
-        const r = await postOne(baseUrl, apiKey, v)
+        const r = await postOne(baseUrl, fieldLoggerKey, v)
         if (r.ok) {
           await markVisitSynced(v.id)
           sent++

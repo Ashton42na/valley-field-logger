@@ -19,11 +19,11 @@ git push
 Get Google key at: console.cloud.google.com
 Get Anthropic key at: console.anthropic.com
 
-## Sync to remote tracker (optional)
-The app stores visits locally in IndexedDB and can optionally push them to a remote tracker.
+## Sync to remote tracker
+The app stores visits locally in IndexedDB and pushes them to the tracker when a Field Logger Key is set.
 Configure in Settings:
-- Sync URL — base URL of the tracker (visits are POSTed to `<url>/api/visits`). Must be `https://` (or `http://localhost` for dev).
-- Sync API Key — sent as `X-API-KEY` on each request.
+- Tracker URL — defaults to `https://tracker.vtlinsider.com`. Visits are POSTed to `<url>/api/visits`. Must be `https://` (or `http://localhost` for dev).
+- Field Logger Key — the `flk_…` key from the portal (My Field Logger). Sent as `X-FIELD-LOGGER-KEY`. This is both how the app authenticates and how visits are credited to you. Required to sync.
 
 Behavior:
 - Visits are queued locally and flushed when the device is online, after each save (debounced), and on demand via "Sync Now". Bursty triggers are coalesced into a single flush.
@@ -34,7 +34,7 @@ Behavior:
 
 ## Data storage
 - Visits: IndexedDB (`vfl-db`, store `visits`). Schema is versioned; migrations run automatically on first open.
-- Settings (API keys, sync URL, device ID, sync log): browser `localStorage` under `vfl-*` keys. Keys never leave the device except when used to call their respective services.
+- Settings (Anthropic key, Field Logger Key, sync URL, device ID, sync log): browser `localStorage` under `vfl-*` keys. The Field Logger Key is sent only as the `X-FIELD-LOGGER-KEY` header on visit ingest — never in the JSON body.
 
 ## Built with
 - React + Vite
