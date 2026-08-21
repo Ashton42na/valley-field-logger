@@ -1,8 +1,11 @@
-import { useState, useRef } from 'react'
-import { addVisit } from '../db/db.js'
+import { useState, useRef, useEffect } from 'react'
+import { addVisit, getVisitsForPlace } from '../db/db.js'
 import { scheduleFlush } from '../sync/syncService.js'
 import VoiceNote from './VoiceNote.jsx'
+import VisitHistory from './VisitHistory.jsx'
 import { scanBusinessCard } from '../utils/anthropic.js'
+import { applyCompanySnapshot, mergeVisitHistories } from '../utils/visitHistory.js'
+import { loadTeamHistory, portalHistoryConfigured } from '../sync/historyService.js'
 
 const STATUSES = [
   { key: 'visited', label: 'Visited', emoji: '✅', cls: 'active-visited' },
@@ -96,8 +99,10 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     notes: '',
     voiceNote: '',
     lat: typeof b.lat === 'number' ? b.lat : null,
-    lon: typeof b.lon === 'number' ? b.lon : null
+    lon: typeof b.lon === 'number' ? b.lon : null,
+    placeId: b.placeId || ''
   })
+  const [historyVisits, setHistoryVisits] = useState([])
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [notesFocused, setNotesFocused] = useState(false)
@@ -124,6 +129,48 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
   const set = (field) => (e) => {
     const val = typeof e === 'string' ? e : e.target.value
     setForm(f => ({ ...f, [field]: val }))
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    const place = {
+      placeId: b.placeId || '',
+      name: b.name || '',
+      address: b.address || '',
+      phone: b.phone || '',
+      lat: typeof b.lat === 'number' ? b.lat : null,
+      lon: typeof b.lon === 'number' ? b.lon : null
+    }
+    ;(async () => {
+      const local = await getVisitsForPlace(place)
+      const team = portalHistoryConfigured()
+        ? await loadTeamHistory(place, {
+            onRefresh: (fresh) => {
+              if (cancelled) return
+              setHistoryVisits(applyCompanySnapshot(
+                mergeVisitHistories(local, fresh.visits, fresh.youUserName),
+                fresh.company
+              ))
+            }
+          })
+        : { visits: [], youUserName: '' }
+      if (cancelled) return
+      setHistoryVisits(applyCompanySnapshot(
+        mergeVisitHistories(local, team.visits, team.youUserName),
+        team.company
+      ))
+    })().catch(() => {})
+    return () => { cancelled = true }
+  }, [b.placeId, b.name, b.address, b.phone])
+
+  const handleReuseContact = (c) => {
+    setForm(f => ({
+      ...f,
+      contactName: c.contactName || f.contactName,
+      contactTitle: c.contactTitle || f.contactTitle,
+      email: c.email || f.email,
+      phone: f.phone?.trim() ? f.phone : (c.phone || f.phone)
+    }))
   }
 
   const handleScanCard = async (e) => {
@@ -429,6 +476,11 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
             onChange={(v) => setForm(f => ({ ...f, voiceNote: v }))}
             apiKey={apiKey}
             showToast={showToast}
+          />
+
+          <VisitHistory
+            visits={historyVisits}
+            onReuseContact={handleReuseContact}
           />
 
           <div style={{ height: 24 }} />
