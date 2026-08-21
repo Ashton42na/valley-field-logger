@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import { searchByName, findNearby, formatDist } from '../utils/places.js'
 import { getAllVisits, getVisitsForPlace, selectVisitsForPlace } from '../db/db.js'
 import { applyCompanySnapshot, mergeVisitHistories, summarizeHistory, pillLabel, nearbyRank } from '../utils/visitHistory.js'
-import { readTeamHistoryCache } from '../sync/historyService.js'
+import { readTeamHistoryCache, fetchTeamHistoryBatch, teamHistoryConfigured } from '../sync/historyService.js'
 
 const IconSearch = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -76,21 +76,6 @@ function BizCard({ biz, onSelect }) {
   )
 }
 
-async function attachHistory(places) {
-  const all = await getAllVisits()
-  const out = []
-  for (const biz of places) {
-    const local = selectVisitsForPlace(all, biz)
-    const cached = await readTeamHistoryCache(biz)
-    const summary = summarizeHistory(applyCompanySnapshot(
-      mergeVisitHistories(local, cached?.visits || [], cached?.youUserName || ''),
-      cached?.company
-    ))
-    out.push({ ...biz, history: summary.count ? summary : null })
-  }
-  return out
-}
-
 function coverageStats(places) {
   let due = 0, neu = 0, today = 0
   for (const p of places) {
@@ -114,18 +99,50 @@ export default function SearchView({ onSelectBusiness }) {
   const debounceRef = useRef(null)
   const genRef = useRef(0)
 
+  const applyRank = (list, rankNearby) => {
+    if (!rankNearby) return list
+    return [...list].sort((a, b) =>
+      nearbyRank(a.history) - nearbyRank(b.history)
+      || (a.distMeters ?? 9999) - (b.distMeters ?? 9999)
+    )
+  }
+
+  const mergeTeamOntoPlaces = (places, batch) => {
+    if (!batch?.results?.length) return places
+    const you = batch.youUserName || ''
+    return places.map((biz, i) => {
+      const row = batch.results[i]
+      const team = row?.team
+      if (!team || team.error) return biz
+      const local = biz._localVisits || []
+      const summary = summarizeHistory(applyCompanySnapshot(
+        mergeVisitHistories(local, team.visits || [], team.youUserName || you),
+        team.company
+      ))
+      return { ...biz, history: summary.count ? summary : null }
+    })
+  }
+
   const hydrate = useCallback(async (places, { rankNearby } = {}) => {
     const gen = ++genRef.current
-    const withHistory = await attachHistory(places)
-    if (gen !== genRef.current) return
-    let next = withHistory
-    if (rankNearby) {
-      next = [...withHistory].sort((a, b) =>
-        nearbyRank(a.history) - nearbyRank(b.history)
-        || (a.distMeters ?? 9999) - (b.distMeters ?? 9999)
-      )
+    const all = await getAllVisits()
+    const withLocal = []
+    for (const biz of places) {
+      const local = selectVisitsForPlace(all, biz)
+      const cached = await readTeamHistoryCache(biz)
+      const summary = summarizeHistory(applyCompanySnapshot(
+        mergeVisitHistories(local, cached?.visits || [], cached?.youUserName || ''),
+        cached?.company
+      ))
+      withLocal.push({ ...biz, _localVisits: local, history: summary.count ? summary : null })
     }
-    setResults(next)
+    if (gen !== genRef.current) return
+    setResults(applyRank(withLocal, rankNearby))
+
+    if (!teamHistoryConfigured()) return
+    const batch = await fetchTeamHistoryBatch(places)
+    if (gen !== genRef.current || batch.error) return
+    setResults(applyRank(mergeTeamOntoPlaces(withLocal, batch), rankNearby))
   }, [])
 
   const handleQueryChange = useCallback((e) => {

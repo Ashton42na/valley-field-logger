@@ -5,7 +5,7 @@ import VoiceNote from './VoiceNote.jsx'
 import VisitHistory from './VisitHistory.jsx'
 import { scanBusinessCard } from '../utils/anthropic.js'
 import { applyCompanySnapshot, mergeVisitHistories } from '../utils/visitHistory.js'
-import { loadTeamHistory, portalHistoryConfigured } from '../sync/historyService.js'
+import { loadTeamHistory, teamHistoryConfigured } from '../sync/historyService.js'
 
 const STATUSES = [
   { key: 'visited', label: 'Visited', emoji: '✅', cls: 'active-visited' },
@@ -143,7 +143,7 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     }
     ;(async () => {
       const local = await getVisitsForPlace(place)
-      const team = portalHistoryConfigured()
+      const team = teamHistoryConfigured()
         ? await loadTeamHistory(place, {
             onRefresh: (fresh) => {
               if (cancelled) return
