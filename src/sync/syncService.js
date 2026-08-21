@@ -147,7 +147,8 @@ function buildPayload(v) {
     notes: v.notes || null,
     voiceNote: v.voiceNote || null,
     lat: typeof v.lat === 'number' ? v.lat : null,
-    lon: typeof v.lon === 'number' ? v.lon : null
+    lon: typeof v.lon === 'number' ? v.lon : null,
+    placeId: v.placeId || null
   }
 }
 

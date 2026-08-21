@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback } from 'react'
 import { searchByName, findNearby, formatDist } from '../utils/places.js'
+import { getAllVisits, getVisitsForPlace, selectVisitsForPlace } from '../db/db.js'
+import { applyCompanySnapshot, mergeVisitHistories, summarizeHistory, pillLabel, nearbyRank } from '../utils/visitHistory.js'
+import { readTeamHistoryCache } from '../sync/historyService.js'
 
 const IconSearch = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -31,10 +34,33 @@ const IconBuilding = () => (
   </svg>
 )
 
-function BizCard({ biz, onSelect }) {
+const IconPeople = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ width: 11, height: 11 }}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+)
+
+function VisitCountPill({ summary }) {
+  if (!summary?.count) return null
   return (
-    <div className="biz-card" onClick={() => onSelect(biz)}>
-      <div className="biz-name">{biz.name}</div>
+    <span className={`visit-count-pill tone-${summary.tone || 'prior'}`}>
+      {summary.teamOnly && <IconPeople />}
+      {pillLabel(summary)}
+    </span>
+  )
+}
+
+function BizCard({ biz, onSelect }) {
+  const dimmed = biz.history && (biz.history.tone === 'today' || biz.history.tone === 'skip')
+  return (
+    <div className={`biz-card ${dimmed ? 'dimmed' : ''}`} onClick={() => onSelect(biz)}>
+      <div className="biz-card-head">
+        <div className="biz-name">{biz.name}</div>
+        <VisitCountPill summary={biz.history} />
+      </div>
       <div className="biz-meta">
         {biz.address && <span>{biz.address}</span>}
         {biz.distMeters != null && (
@@ -50,6 +76,33 @@ function BizCard({ biz, onSelect }) {
   )
 }
 
+async function attachHistory(places) {
+  const all = await getAllVisits()
+  const out = []
+  for (const biz of places) {
+    const local = selectVisitsForPlace(all, biz)
+    const cached = await readTeamHistoryCache(biz)
+    const summary = summarizeHistory(applyCompanySnapshot(
+      mergeVisitHistories(local, cached?.visits || [], cached?.youUserName || ''),
+      cached?.company
+    ))
+    out.push({ ...biz, history: summary.count ? summary : null })
+  }
+  return out
+}
+
+function coverageStats(places) {
+  let due = 0, neu = 0, today = 0
+  for (const p of places) {
+    if (!p.history?.count) { neu++; continue }
+    if (p.history.tone === 'due') due++
+    else if (p.history.tone === 'today') today++
+    else neu++ // skip/prior still "seen" but the strip counts new vs due vs today
+  }
+  const seen = places.filter(p => p.history?.count).length
+  return { due, neu: places.length - seen, today }
+}
+
 export default function SearchView({ onSelectBusiness }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -57,7 +110,23 @@ export default function SearchView({ onSelectBusiness }) {
   const [gpsLoading, setGpsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [mode, setMode] = useState(null)
+  const [manualHistory, setManualHistory] = useState(null)
   const debounceRef = useRef(null)
+  const genRef = useRef(0)
+
+  const hydrate = useCallback(async (places, { rankNearby } = {}) => {
+    const gen = ++genRef.current
+    const withHistory = await attachHistory(places)
+    if (gen !== genRef.current) return
+    let next = withHistory
+    if (rankNearby) {
+      next = [...withHistory].sort((a, b) =>
+        nearbyRank(a.history) - nearbyRank(b.history)
+        || (a.distMeters ?? 9999) - (b.distMeters ?? 9999)
+      )
+    }
+    setResults(next)
+  }, [])
 
   const handleQueryChange = useCallback((e) => {
     const val = e.target.value
@@ -67,6 +136,7 @@ export default function SearchView({ onSelectBusiness }) {
     clearTimeout(debounceRef.current)
     if (!val.trim()) {
       setResults([])
+      setManualHistory(null)
       setMode(null)
       return
     }
@@ -75,15 +145,18 @@ export default function SearchView({ onSelectBusiness }) {
       setMode('name')
       try {
         const res = await searchByName(val)
-        setResults(res)
         if (res.length === 0) setError('No results found. Try a different search or use GPS.')
+        await hydrate(res, { rankNearby: false })
+        const local = await getVisitsForPlace({ name: val.trim(), address: '', phone: '', placeId: '' })
+        const mh = summarizeHistory(mergeVisitHistories(local, [], ''))
+        setManualHistory(mh.count ? mh : null)
       } catch (e) {
         setError(e.message)
       } finally {
         setLoading(false)
       }
     }, 600)
-  }, [])
+  }, [hydrate])
 
   const handleGPS = useCallback(() => {
     if (!navigator.geolocation) {
@@ -94,14 +167,15 @@ export default function SearchView({ onSelectBusiness }) {
     setError(null)
     setResults([])
     setQuery('')
+    setManualHistory(null)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords
         setMode('gps')
         try {
           const res = await findNearby(latitude, longitude)
-          setResults(res)
           if (res.length === 0) setError('No businesses found nearby. Try searching by name instead.')
+          await hydrate(res, { rankNearby: true })
         } catch (e) {
           setError(e.message)
         } finally {
@@ -114,7 +188,7 @@ export default function SearchView({ onSelectBusiness }) {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     )
-  }, [])
+  }, [hydrate])
 
   const handleManualEntry = useCallback(() => {
     onSelectBusiness({
@@ -176,6 +250,9 @@ export default function SearchView({ onSelectBusiness }) {
           >
             <IconPlus />
             Log visit for "{query.trim()}"
+            {manualHistory?.count > 0 && (
+              <VisitCountPill summary={manualHistory} />
+            )}
           </button>
         )}
       </div>
@@ -196,9 +273,19 @@ export default function SearchView({ onSelectBusiness }) {
           <p className="section-title">
             {mode === 'gps' ? `${results.length} nearby businesses` : `${results.length} results`}
           </p>
+          {mode === 'gps' && (() => {
+            const { due, neu, today } = coverageStats(results)
+            return (
+              <p className="coverage-strip">
+                {due > 0 && <span>{due} due</span>}
+                <span>{neu} new</span>
+                {today > 0 && <span>{today} already today</span>}
+              </p>
+            )
+          })()}
           <div className="card" style={{ marginBottom: 16 }}>
-            {results.map(biz => (
-              <BizCard key={biz.placeId} biz={biz} onSelect={onSelectBusiness} />
+            {results.map((biz, i) => (
+              <BizCard key={biz.placeId || biz.name + i} biz={biz} onSelect={onSelectBusiness} />
             ))}
           </div>
         </>

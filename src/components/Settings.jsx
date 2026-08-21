@@ -7,6 +7,7 @@ import {
   getLastResult, subscribe, flush as flushSync,
   getSyncLog, clearSyncLog
 } from '../sync/syncService.js'
+import { getPortalUrl, setPortalUrl } from '../sync/historyService.js'
 
 const IconKey = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
@@ -58,6 +59,7 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
 
   // Sync settings
   const [syncUrlDraft, setSyncUrlDraft] = useState(getSyncBaseUrl())
+  const [portalUrlDraft, setPortalUrlDraft] = useState(getPortalUrl())
   const [fieldLoggerKeyDraft, setFieldLoggerKeyDraft] = useState(getFieldLoggerKey())
   const [showFieldLoggerKey, setShowFieldLoggerKey] = useState(false)
   const [syncPending, setSyncPending] = useState(0)
@@ -79,6 +81,7 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
   }, [refreshPending, refreshLog])
 
   const syncUrlChanged = syncUrlDraft !== getSyncBaseUrl()
+  const portalUrlChanged = portalUrlDraft !== getPortalUrl()
   const fieldLoggerKeyChanged = fieldLoggerKeyDraft !== getFieldLoggerKey()
 
   const handleSaveSyncUrl = () => {
@@ -86,6 +89,15 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
       setSyncBaseUrl(syncUrlDraft.trim())
       setSyncUrlDraft(getSyncBaseUrl())
       showToast('Sync URL saved', 'success')
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
+  }
+  const handleSavePortalUrl = () => {
+    try {
+      setPortalUrl(portalUrlDraft.trim())
+      setPortalUrlDraft(getPortalUrl())
+      showToast(getPortalUrl() ? 'Portal URL saved' : 'Portal URL cleared', 'success')
     } catch (e) {
       showToast(e.message, 'error')
     }
@@ -261,6 +273,31 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
           <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
             Paste the full key from the portal (My Field Logger). This is how the app signs in as you —
             visits you log are credited to your account. Required to sync.
+          </p>
+
+          <div className="settings-label" style={{ marginTop: 4 }}>Portal URL</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="form-input"
+              type="url"
+              value={portalUrlDraft}
+              onChange={e => setPortalUrlDraft(e.target.value)}
+              placeholder="https://your-portal (optional)"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ fontSize: 14, flex: 1 }}
+            />
+          </div>
+          {portalUrlChanged && (
+            <button className="btn btn-primary btn-full" onClick={handleSavePortalUrl} style={{ height: 44, marginBottom: 12 }}>
+              <IconCheck /> Save Portal URL
+            </button>
+          )}
+          <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+            Optional. When set, search and Log Visit show teammates' previous visits at this door
+            (Canvas Drop In history from the portal). Uses the same Field Logger Key. Leave blank
+            to keep history on this device only.
           </p>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0', fontSize: 13, color: 'var(--text2)' }}>

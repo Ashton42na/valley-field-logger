@@ -1,7 +1,8 @@
 import { openDB } from 'idb'
+import { visitMatchesPlace, namesMatch, normAddressKey } from '../utils/placeMatch.js'
 
 const DB_NAME = 'valley-field-logger'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -25,6 +26,18 @@ async function getDB() {
           if (!v.syncStatus) { v.syncStatus = 'pending'; changed = true }
           if (changed) await cursor.update(v)
           cursor = await cursor.continue()
+        }
+      }
+      if (oldVersion < 3) {
+        const store = tx.objectStore('visits')
+        if (!store.indexNames.contains('placeId')) {
+          store.createIndex('placeId', 'placeId')
+        }
+        if (!store.indexNames.contains('companyName')) {
+          store.createIndex('companyName', 'companyName')
+        }
+        if (!db.objectStoreNames.contains('historyCache')) {
+          db.createObjectStore('historyCache', { keyPath: 'cacheKey' })
         }
       }
     }
@@ -129,4 +142,75 @@ export async function resetFailedToPending() {
     await tx.store.put(v)
   }
   await tx.done
+}
+
+function doorKey(v) {
+  if (v.placeId) return 'pid:' + v.placeId
+  if (typeof v.lat === 'number' && typeof v.lon === 'number') {
+    return 'geo:' + v.lat.toFixed(4) + ',' + v.lon.toFixed(4)
+  }
+  const addr = normAddressKey(v.address)
+  if (addr) return 'a:' + addr
+  return 'name'
+}
+
+export function selectVisitsForPlace(all, place) {
+  const list = all || []
+  const placeIsBareName = !place?.placeId && !place?.address && !place?.phone && typeof place?.lat !== 'number'
+  let matched
+  if (placeIsBareName) {
+    const named = list.filter(v => namesMatch(v.companyName, place.name))
+    const keys = new Set(named.map(doorKey))
+    matched = keys.size === 1 ? named : []
+  } else {
+    matched = list.filter(v => visitMatchesPlace(v, place).matched)
+  }
+  matched.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+  return matched
+}
+
+export async function getVisitsForPlace(place) {
+  const all = await getAllVisits()
+  const matched = selectVisitsForPlace(all, place)
+  const backfillIds = []
+  if (place?.placeId) {
+    for (const v of matched) {
+      if (v.placeId) continue
+      const conf = visitMatchesPlace(v, place).confidence
+      if (conf === 'geo' || conf === 'addr' || conf === 'phone-and-addr') backfillIds.push(v.id)
+    }
+  }
+  if (backfillIds.length && place?.placeId) {
+    await backfillPlaceId(backfillIds, place.placeId)
+    for (const v of matched) {
+      if (!v.placeId) v.placeId = place.placeId
+    }
+  }
+  return matched
+}
+
+export async function backfillPlaceId(ids, placeId) {
+  if (!placeId || !ids?.length) return
+  const db = await getDB()
+  const tx = db.transaction('visits', 'readwrite')
+  for (const id of ids) {
+    const v = await tx.store.get(id)
+    if (v && !v.placeId) {
+      v.placeId = placeId
+      await tx.store.put(v)
+    }
+  }
+  await tx.done
+}
+
+export async function getHistoryCache(cacheKey) {
+  if (!cacheKey) return null
+  const db = await getDB()
+  return db.get('historyCache', cacheKey)
+}
+
+export async function putHistoryCache(cacheKey, payload) {
+  if (!cacheKey) return
+  const db = await getDB()
+  return db.put('historyCache', { cacheKey, fetchedAt: Date.now(), ...payload })
 }

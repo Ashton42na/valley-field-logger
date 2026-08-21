@@ -32,9 +32,18 @@ Behavior:
 - Server response bodies are sanitized (length-capped, control chars stripped, API key redacted) before being persisted or rendered.
 - Sync status (pending / sent / failed) and the last 100 sync log entries are visible in Settings.
 
+## Visit history
+Search results show a count pill when this device (and, if Portal URL is set, the team) has already logged that *physical location* — not just the same company name. Two buildings with the same name stay separate. The pill is green for a prior visit, amber `Due` when a follow-up date is today or overdue, red `Skip` when the last visit was Not Interested within 90 days, and muted `Today` if you already logged it today.
+
+Nearby re-ranks: follow-ups first, never-visited next, already-today / recent not-interested last.
+
+On Log Visit, a Previous visits panel sits below Voice Note with last contact, outcome, temperature, and one-tap reuse of the last contact. History is read-only except that reuse button.
+
+Team history is optional: set Portal URL in Settings (https to the portal). The same Field Logger Key authenticates `GET /api/field-logger/visit-history`. Offline, cached team rows from the last 24 hours still show; otherwise the pill and timeline fall back to this device.
+
 ## Data storage
-- Visits: IndexedDB (`vfl-db`, store `visits`). Schema is versioned; migrations run automatically on first open.
-- Settings (Anthropic key, Field Logger Key, sync URL, device ID, sync log): browser `localStorage` under `vfl-*` keys. The Field Logger Key is sent only as the `X-FIELD-LOGGER-KEY` header on visit ingest — never in the JSON body.
+- Visits: IndexedDB (`valley-field-logger`, store `visits`). Schema is versioned; migrations run automatically on first open. v3 adds `placeId` so history can key off the Google Place, not just the name.
+- Settings (Anthropic key, Field Logger Key, sync URL, portal URL, device ID, sync log): browser `localStorage` under `vfl-*` keys. The Field Logger Key is sent only as the `X-FIELD-LOGGER-KEY` header on visit ingest and history lookup — never in the JSON body.
 
 ## Built with
 - React + Vite
