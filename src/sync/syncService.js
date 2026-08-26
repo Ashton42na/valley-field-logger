@@ -6,10 +6,10 @@ import {
   markVisitSyncFailed
 } from '../db/db.js'
 
-const STORAGE_BASE_URL = 'vfl-sync-base-url'
 const STORAGE_FIELD_LOGGER_KEY = 'vfl-field-logger-key'
 const STORAGE_LEGACY_API_KEY = 'vfl-sync-api-key' // leftover from the shared X-API-KEY era; still sent if present so an old tracker keeps working during rollout
-const DEFAULT_SYNC_URL = 'https://tracker.vtlinsider.com'
+const STORAGE_LEGACY_BASE_URL = 'vfl-sync-base-url' // leftover from when Settings let you type a tracker URL
+const SYNC_URL = 'https://tracker.vtlinsider.com'
 const FIELD_LOGGER_KEY_PREFIX = 'flk_'
 const FIELD_LOGGER_KEY_MIN_LENGTH = 13 // prefix (4) + more than the 12-char display prefix
 const STORAGE_DEVICE_ID = 'vfl-device-id'
@@ -36,13 +36,9 @@ function isValidSyncUrl(v) {
   } catch { return false }
 }
 
-export function getSyncBaseUrl() { return localStorage.getItem(STORAGE_BASE_URL) || DEFAULT_SYNC_URL }
-export function setSyncBaseUrl(v) {
-  const trimmed = (v || '').trim() || DEFAULT_SYNC_URL
-  if (!isValidSyncUrl(trimmed)) {
-    throw new Error('Sync URL must use https:// (or http://localhost for dev)')
-  }
-  localStorage.setItem(STORAGE_BASE_URL, trimmed)
+export function getSyncBaseUrl() {
+  try { localStorage.removeItem(STORAGE_LEGACY_BASE_URL) } catch {}
+  return SYNC_URL
 }
 
 // Per-tech Field Logger Key, issued by the portal (My Field Logger). This is the ingest credential
