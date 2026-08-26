@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react'
 import { getAllVisits, countPendingSync, resetFailedToPending } from '../db/db.js'
 import { exportVisitsToCSV } from '../utils/csvExport.js'
 import {
-  getSyncBaseUrl, setSyncBaseUrl,
   getFieldLoggerKey, setFieldLoggerKey, looksLikeFieldLoggerKey,
   getLastResult, subscribe, flush as flushSync,
   getSyncLog, clearSyncLog
@@ -49,7 +48,6 @@ export default function Settings({ aiEnabled, onCredentialsChanged, showToast })
   }, [showToast])
 
   // Sync settings
-  const [syncUrlDraft, setSyncUrlDraft] = useState(getSyncBaseUrl())
   const [fieldLoggerKeyDraft, setFieldLoggerKeyDraft] = useState(getFieldLoggerKey())
   const [showFieldLoggerKey, setShowFieldLoggerKey] = useState(false)
   const [syncPending, setSyncPending] = useState(0)
@@ -70,19 +68,8 @@ export default function Settings({ aiEnabled, onCredentialsChanged, showToast })
     return unsub
   }, [refreshPending, refreshLog])
 
-  const syncUrlChanged = syncUrlDraft !== getSyncBaseUrl()
   const fieldLoggerKeyChanged = fieldLoggerKeyDraft !== getFieldLoggerKey()
 
-  const handleSaveSyncUrl = () => {
-    try {
-      setSyncBaseUrl(syncUrlDraft.trim())
-      setSyncUrlDraft(getSyncBaseUrl())
-      showToast('Sync URL saved', 'success')
-      onCredentialsChanged?.()
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
   const handleSaveFieldLoggerKey = () => {
     const next = fieldLoggerKeyDraft.trim()
     if (next && !looksLikeFieldLoggerKey(next)) {
@@ -159,7 +146,7 @@ export default function Settings({ aiEnabled, onCredentialsChanged, showToast })
         <div className="settings-row">
           <div className="settings-label">Storage</div>
           <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
-            Visits are saved locally on this device. When sync is configured below, new visits also upload to the central tracker.
+            Visits are saved locally on this device. When a Field Logger Key is saved below, new visits also upload to the central tracker.
           </p>
           <button className="btn btn-secondary btn-full" onClick={handleExportAll} style={{ height: 44, fontSize: 14 }}>
             <IconDownload />
@@ -172,27 +159,7 @@ export default function Settings({ aiEnabled, onCredentialsChanged, showToast })
       <p className="section-title" style={{ marginBottom: 10 }}>Sync to Tracker</p>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="settings-row">
-          <div className="settings-label">Tracker URL</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <input
-              className="form-input"
-              type="url"
-              value={syncUrlDraft}
-              onChange={e => setSyncUrlDraft(e.target.value)}
-              placeholder="https://tracker.vtlinsider.com"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              style={{ fontSize: 14, flex: 1 }}
-            />
-          </div>
-          {syncUrlChanged && (
-            <button className="btn btn-primary btn-full" onClick={handleSaveSyncUrl} style={{ height: 44, marginBottom: 12 }}>
-              <IconCheck /> Save URL
-            </button>
-          )}
-
-          <div className="settings-label" style={{ marginTop: 4 }}>
+          <div className="settings-label">
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconKey /> Field Logger Key</span>
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
