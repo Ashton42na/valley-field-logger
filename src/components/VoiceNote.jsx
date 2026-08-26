@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useVoiceRecording } from '../hooks/useVoiceRecording.js'
-import { cleanupVoiceNote } from '../utils/anthropic.js'
+import { cleanupVoiceNote } from '../utils/companyAi.js'
 
 const IconMic = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -27,7 +27,7 @@ const IconTrash = () => (
   </svg>
 )
 
-export default function VoiceNote({ value, onChange, apiKey, showToast }) {
+export default function VoiceNote({ value, onChange, aiEnabled, showToast }) {
   const { isRecording, transcript, error, startRecording, stopRecording, clearTranscript, setTranscript } = useVoiceRecording()
   const [cleaning, setCleaning] = useState(false)
   const [localText, setLocalText] = useState(value || '')
@@ -60,7 +60,7 @@ export default function VoiceNote({ value, onChange, apiKey, showToast }) {
     if (!text.trim()) return
     setCleaning(true)
     try {
-      const cleaned = await cleanupVoiceNote(text, apiKey)
+      const cleaned = await cleanupVoiceNote(text)
       if (transcript) {
         clearTranscript()
         setLocalText(cleaned)
@@ -123,7 +123,7 @@ export default function VoiceNote({ value, onChange, apiKey, showToast }) {
             />
             {hasContent && (
               <div className="voice-actions">
-                {apiKey ? (
+                {aiEnabled ? (
                   <button
                     className="ai-btn"
                     onClick={handleCleanup}
@@ -133,7 +133,7 @@ export default function VoiceNote({ value, onChange, apiKey, showToast }) {
                     {cleaning ? 'Cleaning…' : 'Clean with AI'}
                   </button>
                 ) : (
-                  <span className="voice-no-key">Add your Anthropic API key in Settings to use AI cleanup</span>
+                  <span className="voice-no-key">Paste your Field Logger Key in Settings to use company AI</span>
                 )}
                 <button className="clear-btn" onClick={handleClear} disabled={isRecording}>
                   <IconTrash />

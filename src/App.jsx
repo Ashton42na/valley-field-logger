@@ -4,6 +4,7 @@ import VisitForm from './components/VisitForm.jsx'
 import VisitList from './components/VisitList.jsx'
 import Settings from './components/Settings.jsx'
 import { scheduleFlush } from './sync/syncService.js'
+import { getAiStatus } from './utils/companyAi.js'
 
 const IconSearch = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -36,7 +37,7 @@ function Toast({ msg }) {
 export default function App() {
   const [view, setView] = useState('search')
   const [pendingBusiness, setPendingBusiness] = useState(null)
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('vfl-anthropic-key') || '')
+  const [aiEnabled, setAiEnabled] = useState(false)
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
 
@@ -48,17 +49,23 @@ export default function App() {
     }, 2200)
   }, [])
 
-  useEffect(() => {
-    const onOnline = () => scheduleFlush(1500)
-    window.addEventListener('online', onOnline)
-    if (navigator.onLine) scheduleFlush(1500)
-    return () => window.removeEventListener('online', onOnline)
+  const refreshAi = useCallback(async () => {
+    try {
+      const s = await getAiStatus()
+      setAiEnabled(!!s.enabled)
+    } catch {
+      setAiEnabled(false)
+    }
   }, [])
 
-  const saveApiKey = useCallback((key) => {
-    setApiKey(key)
-    localStorage.setItem('vfl-anthropic-key', key)
-  }, [])
+  useEffect(() => {
+    try { localStorage.removeItem('vfl-anthropic-key') } catch {}
+    const onOnline = () => { scheduleFlush(1500); refreshAi() }
+    window.addEventListener('online', onOnline)
+    if (navigator.onLine) scheduleFlush(1500)
+    refreshAi()
+    return () => window.removeEventListener('online', onOnline)
+  }, [refreshAi])
 
   const handleBusinessSelect = useCallback((business) => {
     setPendingBusiness(business)
@@ -85,7 +92,7 @@ export default function App() {
       {isFormView ? (
         <VisitForm
           business={pendingBusiness}
-          apiKey={apiKey}
+          aiEnabled={aiEnabled}
           onSaved={handleVisitSaved}
           onCancel={handleCancel}
           showToast={showToast}
@@ -101,7 +108,8 @@ export default function App() {
             )}
             {view === 'settings' && (
               <Settings
-                apiKey={apiKey} onSaveApiKey={saveApiKey}
+                aiEnabled={aiEnabled}
+                onCredentialsChanged={refreshAi}
                 showToast={showToast}
               />
             )}

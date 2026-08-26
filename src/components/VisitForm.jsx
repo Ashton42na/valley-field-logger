@@ -3,7 +3,7 @@ import { addVisit, getVisitsForPlace } from '../db/db.js'
 import { scheduleFlush } from '../sync/syncService.js'
 import VoiceNote from './VoiceNote.jsx'
 import VisitHistory from './VisitHistory.jsx'
-import { scanBusinessCard } from '../utils/anthropic.js'
+import { scanBusinessCard, downscaleImageFile } from '../utils/companyAi.js'
 import { applyCompanySnapshot, mergeVisitHistories } from '../utils/visitHistory.js'
 import { loadTeamHistory, teamHistoryConfigured } from '../sync/historyService.js'
 
@@ -80,7 +80,7 @@ const NOTE_TEMPLATES = [
   'Not interested at this time',
 ]
 
-export default function VisitForm({ business, apiKey, onSaved, onCancel, showToast }) {
+export default function VisitForm({ business, aiEnabled, onSaved, onCancel, showToast }) {
   const b = business || {}
   const [form, setForm] = useState({
     companyName: b.name || '',
@@ -178,23 +178,15 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
     e.target.value = ''
     if (!file) return
 
-    if (!apiKey) {
-      showToast('Add your Anthropic API key in Settings to scan cards', 'error')
+    if (!aiEnabled) {
+      showToast('Paste your Field Logger Key in Settings to scan cards', 'error')
       return
     }
 
     setScanning(true)
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = ev => resolve(ev.target.result)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
-      const base64 = dataUrl.split(',')[1]
-      const mimeType = file.type || 'image/jpeg'
-      const extracted = await scanBusinessCard(base64, mimeType, apiKey)
+      const { base64, mimeType } = await downscaleImageFile(file)
+      const extracted = await scanBusinessCard(base64, mimeType)
 
       setForm(f => ({
         ...f,
@@ -270,8 +262,8 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
             <button
               className="btn btn-icon"
               onClick={() => fileInputRef.current?.click()}
-              disabled={scanning}
-              title="Scan business card"
+              disabled={scanning || !aiEnabled}
+              title={aiEnabled ? 'Scan business card' : 'Paste your Field Logger Key in Settings to scan cards'}
               style={{ width: 36, height: 36 }}
             >
               {scanning
@@ -474,7 +466,7 @@ export default function VisitForm({ business, apiKey, onSaved, onCancel, showToa
           <VoiceNote
             value={form.voiceNote}
             onChange={(v) => setForm(f => ({ ...f, voiceNote: v }))}
-            apiKey={apiKey}
+            aiEnabled={aiEnabled}
             showToast={showToast}
           />
 
