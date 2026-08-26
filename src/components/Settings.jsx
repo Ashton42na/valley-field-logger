@@ -36,16 +36,7 @@ const IconInfo = () => (
   </svg>
 )
 
-export default function Settings({ apiKey, onSaveApiKey, showToast }) {
-  const [draft, setDraft] = useState(apiKey)
-  const [showKey, setShowKey] = useState(false)
-  const changed = draft !== apiKey
-
-  const handleSave = () => {
-    onSaveApiKey(draft.trim())
-    showToast('API key saved', 'success')
-  }
-
+export default function Settings({ aiEnabled, onCredentialsChanged, showToast }) {
   const handleExportAll = useCallback(async () => {
     try {
       const all = await getAllVisits()
@@ -87,6 +78,7 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
       setSyncBaseUrl(syncUrlDraft.trim())
       setSyncUrlDraft(getSyncBaseUrl())
       showToast('Sync URL saved', 'success')
+      onCredentialsChanged?.()
     } catch (e) {
       showToast(e.message, 'error')
     }
@@ -100,6 +92,7 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
     setFieldLoggerKey(next)
     setFieldLoggerKeyDraft(getFieldLoggerKey())
     showToast('Field Logger Key saved', 'success')
+    onCredentialsChanged?.()
   }
   const handleSyncNow = async () => {
     setSyncing(true)
@@ -137,53 +130,25 @@ export default function Settings({ apiKey, onSaveApiKey, showToast }) {
         <p>Valley Techlogic · v1.0.0</p>
       </div>
 
-      {/* Anthropic API key */}
-      <p className="section-title" style={{ marginBottom: 10 }}>AI Notes Cleanup</p>
+      {/* Company AI */}
+      <p className="section-title" style={{ marginBottom: 10 }}>Company AI</p>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="settings-row">
-          <div className="settings-label">
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IconKey /> Anthropic API Key
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <input
-              className="form-input"
-              type={showKey ? 'text' : 'password'}
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              placeholder="sk-ant-…"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              style={{ fontFamily: showKey ? 'monospace' : 'inherit', fontSize: 14, flex: 1 }}
-            />
-            <button
-              className="btn btn-icon"
-              onClick={() => setShowKey(v => !v)}
-              aria-label={showKey ? 'Hide key' : 'Show key'}
-              style={{ flexShrink: 0 }}
-            >
-              {showKey
-                ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              }
-            </button>
-          </div>
-          {changed && (
-            <button className="btn btn-primary btn-full" onClick={handleSave} style={{ height: 44 }}>
-              <IconCheck />
-              Save Key
-            </button>
-          )}
-          {apiKey && !changed && (
+          {aiEnabled ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--green)' }}>
-              <IconCheck /> Key saved
+              <IconCheck /> Clean with AI and card scan are on
             </div>
+          ) : looksLikeFieldLoggerKey(getFieldLoggerKey()) ? (
+            <p className="settings-hint" style={{ margin: 0 }}>
+              Company AI is not configured. Ask an admin to set the OpenRouter key on My Field Logger.
+            </p>
+          ) : (
+            <p className="settings-hint" style={{ margin: 0 }}>
+              Paste your Field Logger Key below to use company-provided Clean with AI and card scan.
+            </p>
           )}
           <p className="settings-hint">
-            Used only for the "Clean with AI" button on voice notes. Your key is stored locally on this device only.
-            Get a key at console.anthropic.com.
+            Clean with AI and card scan are provided by Valley Techlogic once a Field Logger Key is saved. You do not need your own AI API key.
           </p>
         </div>
       </div>

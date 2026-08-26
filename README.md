@@ -14,10 +14,8 @@ git commit -m "your message"
 git push
 
 ## API Keys needed
-- Google Places API Key (enter in app Settings)
-- Anthropic API Key (enter in app Settings)
-Get Google key at: console.cloud.google.com
-Get Anthropic key at: console.anthropic.com
+- Google Places API Key is held by the Netlify `places` function (`GOOGLE_PLACES_API_KEY`). It is not entered in the app.
+- Company AI (voice-note cleanup and business-card scan) is provided by Valley Techlogic via the tracker. Paste a Field Logger Key from My Field Logger — you do not need an Anthropic or OpenRouter key on the phone.
 
 ## Sync to remote tracker
 The app stores visits locally in IndexedDB and pushes them to the tracker when a Field Logger Key is set.
@@ -43,7 +41,7 @@ Team history uses the same Tracker URL and Field Logger Key as visit ingest (`GE
 
 ## Data storage
 - Visits: IndexedDB (`valley-field-logger`, store `visits`). Schema is versioned; migrations run automatically on first open. v3 adds `placeId` so history can key off the Google Place, not just the name.
-- Settings (Anthropic key, Field Logger Key, sync URL, device ID, sync log): browser `localStorage` under `vfl-*` keys. The Field Logger Key is sent only as the `X-FIELD-LOGGER-KEY` header on visit ingest and history lookup — never in the JSON body.
+- Settings (Field Logger Key, sync URL, device ID, sync log): browser `localStorage` under `vfl-*` keys. The Field Logger Key is sent only as the `X-FIELD-LOGGER-KEY` header on visit ingest, history lookup, and company AI (`/api/ai/*`) — never in the JSON body. The OpenRouter key never lands on the device.
 
 ## Built with
 - React + Vite
