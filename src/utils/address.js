@@ -28,7 +28,7 @@ function hasStructuredAddress(source = {}) {
 
 export function parsePlaceComponents(components) {
   if (!Array.isArray(components)) return {}
-  let streetNumber, route, subpremise, city, state, zip
+  let streetNumber, route, subpremise, city, state, zip, zipSuffix
   for (const c of components) {
     const types = c.types || []
     const longText = c.longText || c.long_name || ''
@@ -39,14 +39,16 @@ export function parsePlaceComponents(components) {
     else if (types.includes('locality')) city = longText
     else if (types.includes('administrative_area_level_1')) state = shortText
     else if (types.includes('postal_code')) zip = longText
+    else if (types.includes('postal_code_suffix')) zipSuffix = longText
   }
   const address1 = [streetNumber, route].filter(Boolean).join(' ')
+  const zip4 = zipSuffix ? String(zipSuffix).replace(/^-/, '') : ''
   return {
     address1: address1 || '',
     address2: subpremise || '',
     city: city || '',
     state: state || '',
-    zip: zip || ''
+    zip: zip && zip4 ? `${zip}-${zip4}` : (zip || '')
   }
 }
 

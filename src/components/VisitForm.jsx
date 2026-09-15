@@ -8,7 +8,7 @@ import { applyCompanySnapshot, mergeVisitHistories } from '../utils/visitHistory
 import { loadTeamHistory, teamHistoryConfigured } from '../sync/historyService.js'
 import { searchByName } from '../utils/places.js'
 import { namesMatch, phonesMatch } from '../utils/placeMatch.js'
-import { joinAddress, addressFieldsFromExtracted, assignNonEmptyStructured } from '../utils/address.js'
+import { joinAddress, addressFieldsFromExtracted, structuredAddressFrom, assignNonEmptyStructured } from '../utils/address.js'
 
 const STATUSES = [
   { key: 'visited', label: 'Visited', emoji: '✅', cls: 'active-visited' },
@@ -248,6 +248,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
         // OCR may still send only the one-line `address`. Prefer that over leftover Places
         // structured fields from the previous pick; a unique Places match below overwrites.
         const extractedStructured = !!(extracted.address1 || extracted.address2 || extracted.city || extracted.state || extracted.zip)
+        if (extractedStructured) Object.assign(next, structuredAddressFrom(extracted))
         if (!extractedStructured && extracted.address) {
           next.address1 = extracted.address
           next.address2 = ''
