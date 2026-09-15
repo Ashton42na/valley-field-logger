@@ -119,7 +119,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
   const [form, setForm] = useState({
     companyName: b.name || '',
     address: b.address || '',
-    address1: b.address1 || b.address || '',
+    address1: b.address1 != null ? b.address1 : (b.address || ''),
     address2: b.address2 || '',
     city: b.city || '',
     state: b.state || '',
@@ -247,7 +247,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
         }
         // OCR may still send only the one-line `address`. Prefer that over leftover Places
         // structured fields from the previous pick; a unique Places match below overwrites.
-        const extractedStructured = !!(extracted.address1 || extracted.city)
+        const extractedStructured = !!(extracted.address1 || extracted.address2 || extracted.city || extracted.state || extracted.zip)
         if (!extractedStructured && extracted.address) {
           next.address1 = extracted.address
           next.address2 = ''
@@ -261,7 +261,9 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           if (typeof place.lon === 'number') next.lon = place.lon
           if (place.website && !next.website) next.website = place.website
           if (place.phone && !next.phone) next.phone = place.phone
-          Object.assign(next, structuredAddressFrom(place))
+          const placeParts = structuredAddressFrom(place)
+          const placeHasParts = !!(placeParts.address1 || placeParts.address2 || placeParts.city || placeParts.state || placeParts.zip)
+          if (placeHasParts) Object.assign(next, placeParts)
           next.address = joinAddress(next) || place.address || ''
         } else {
           next.address = joinAddress(next)
