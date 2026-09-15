@@ -255,6 +255,8 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           next.city = ''
           next.state = ''
           next.zip = ''
+        } else if (!next.address1 && extracted.address) {
+          next.address1 = extracted.address
         }
         if (place) {
           next.placeId = place.placeId || next.placeId
