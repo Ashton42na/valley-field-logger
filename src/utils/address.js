@@ -1,8 +1,7 @@
 export function joinAddress({ address1, address2, city, state, zip, address } = {}) {
-  if (address1 || city) {
-    const cityStateZip = [city, state, zip].filter(Boolean).join(' ')
-    return [address1, address2, cityStateZip].filter(Boolean).join(', ')
-  }
+  const cityStateZip = [city, state, zip].filter(Boolean).join(' ')
+  const parts = [address1, address2, cityStateZip].filter(Boolean)
+  if (parts.length) return parts.join(', ')
   return (address || '').trim()
 }
 

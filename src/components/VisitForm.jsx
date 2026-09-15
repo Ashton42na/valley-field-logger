@@ -86,12 +86,14 @@ const NOTE_TEMPLATES = [
 async function matchCardToPlace(extracted) {
   const name = (extracted.companyName || '').trim()
   const phone = extracted.phone || ''
-  if (!name) return null
+  const query = name || phone
+  if (!query) return null
   try {
-    const results = await searchByName(name)
+    const results = await searchByName(query)
     if (!Array.isArray(results) || results.length === 0) return null
     const phoneHits = phone ? results.filter(p => phonesMatch(phone, p.phone)) : []
     if (phoneHits.length === 1) return phoneHits[0]
+    if (!name) return null
     const nameHits = results.filter(p => namesMatch(name, p.name))
     if (nameHits.length === 1) return nameHits[0]
   } catch {
@@ -225,6 +227,9 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           ...(extracted.website      && { website:       extracted.website }),
           ...addressFieldsFromExtracted(extracted)
         }
+        // Tracker/OCR may still send only the one-line `address`. Put it in Address 1 so the
+        // tech can see and edit it; the portal splits city/state/zip on ingest.
+        if (!next.address1 && !next.city && extracted.address) next.address1 = extracted.address
         if (place) {
           next.placeId = place.placeId || next.placeId
           if (typeof place.lat === 'number') next.lat = place.lat
