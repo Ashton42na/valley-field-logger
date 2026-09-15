@@ -83,19 +83,31 @@ const NOTE_TEMPLATES = [
   'Not interested at this time',
 ]
 
+async function pickUniquePlace(results, extracted) {
+  if (!Array.isArray(results) || results.length === 0) return null
+  const phone = extracted.phone || ''
+  const phoneHits = phone ? results.filter(p => phonesMatch(phone, p.phone)) : []
+  if (phoneHits.length === 1) return phoneHits[0]
+  const name = (extracted.companyName || '').trim()
+  if (!name) return null
+  const nameHits = results.filter(p => namesMatch(name, p.name))
+  if (nameHits.length === 1) return nameHits[0]
+  return null
+}
+
 async function matchCardToPlace(extracted) {
   const name = (extracted.companyName || '').trim()
   const phone = extracted.phone || ''
-  const query = name || phone
-  if (!query) return null
+  if (!name && !phone) return null
   try {
-    const results = await searchByName(query)
-    if (!Array.isArray(results) || results.length === 0) return null
-    const phoneHits = phone ? results.filter(p => phonesMatch(phone, p.phone)) : []
-    if (phoneHits.length === 1) return phoneHits[0]
-    if (!name) return null
-    const nameHits = results.filter(p => namesMatch(name, p.name))
-    if (nameHits.length === 1) return nameHits[0]
+    if (name) {
+      const byName = await pickUniquePlace(await searchByName(name), extracted)
+      if (byName) return byName
+    }
+    if (phone) {
+      const byPhone = await pickUniquePlace(await searchByName(phone), extracted)
+      if (byPhone) return byPhone
+    }
   } catch {
     // Places is a confirm, not a requirement — card OCR still fills the form.
   }
@@ -107,7 +119,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
   const [form, setForm] = useState({
     companyName: b.name || '',
     address: b.address || '',
-    address1: b.address1 || '',
+    address1: b.address1 || b.address || '',
     address2: b.address2 || '',
     city: b.city || '',
     state: b.state || '',
@@ -227,9 +239,16 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           ...(extracted.website      && { website:       extracted.website }),
           ...addressFieldsFromExtracted(extracted)
         }
-        // Tracker/OCR may still send only the one-line `address`. Put it in Address 1 so the
-        // tech can see and edit it; the portal splits city/state/zip on ingest.
-        if (!next.address1 && !next.city && extracted.address) next.address1 = extracted.address
+        // OCR may still send only the one-line `address`. Prefer that over leftover Places
+        // structured fields from the previous pick; a unique Places match below overwrites.
+        const extractedStructured = !!(extracted.address1 || extracted.city)
+        if (!extractedStructured && extracted.address) {
+          next.address1 = extracted.address
+          next.address2 = ''
+          next.city = ''
+          next.state = ''
+          next.zip = ''
+        }
         if (place) {
           next.placeId = place.placeId || next.placeId
           if (typeof place.lat === 'number') next.lat = place.lat
