@@ -6,6 +6,9 @@ import VisitHistory from './VisitHistory.jsx'
 import { scanBusinessCard, downscaleImageFile } from '../utils/companyAi.js'
 import { applyCompanySnapshot, mergeVisitHistories } from '../utils/visitHistory.js'
 import { loadTeamHistory, teamHistoryConfigured } from '../sync/historyService.js'
+import { searchByName } from '../utils/places.js'
+import { namesMatch, phonesMatch } from '../utils/placeMatch.js'
+import { joinAddress, addressFieldsFromExtracted } from '../utils/address.js'
 
 const STATUSES = [
   { key: 'visited', label: 'Visited', emoji: '✅', cls: 'active-visited' },
@@ -80,11 +83,33 @@ const NOTE_TEMPLATES = [
   'Not interested at this time',
 ]
 
+async function matchCardToPlace(extracted) {
+  const name = (extracted.companyName || '').trim()
+  const phone = extracted.phone || ''
+  if (!name) return null
+  try {
+    const results = await searchByName(name)
+    if (!Array.isArray(results) || results.length === 0) return null
+    const phoneHits = phone ? results.filter(p => phonesMatch(phone, p.phone)) : []
+    if (phoneHits.length === 1) return phoneHits[0]
+    const nameHits = results.filter(p => namesMatch(name, p.name))
+    if (nameHits.length === 1) return nameHits[0]
+  } catch {
+    // Places is a confirm, not a requirement — card OCR still fills the form.
+  }
+  return null
+}
+
 export default function VisitForm({ business, aiEnabled, onSaved, onCancel, showToast }) {
   const b = business || {}
   const [form, setForm] = useState({
     companyName: b.name || '',
     address: b.address || '',
+    address1: b.address1 || '',
+    address2: b.address2 || '',
+    city: b.city || '',
+    state: b.state || '',
+    zip: b.zip || '',
     phone: b.phone || '',
     website: b.website || '',
     industry: b.industry || '',
@@ -187,18 +212,34 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
     try {
       const { base64, mimeType } = await downscaleImageFile(file)
       const extracted = await scanBusinessCard(base64, mimeType)
+      const place = await matchCardToPlace(extracted)
 
-      setForm(f => ({
-        ...f,
-        ...(extracted.companyName  && { companyName:   extracted.companyName }),
-        ...(extracted.contactName  && { contactName:   extracted.contactName }),
-        ...(extracted.contactTitle && { contactTitle:  extracted.contactTitle }),
-        ...(extracted.phone        && { phone:         extracted.phone }),
-        ...(extracted.email        && { email:         extracted.email }),
-        ...(extracted.website      && { website:       extracted.website }),
-        ...(extracted.address      && { address:       extracted.address })
-      }))
-      showToast('Card scanned — review and confirm fields', 'success')
+      setForm(f => {
+        const next = {
+          ...f,
+          ...(extracted.companyName  && { companyName:   extracted.companyName }),
+          ...(extracted.contactName  && { contactName:   extracted.contactName }),
+          ...(extracted.contactTitle && { contactTitle:  extracted.contactTitle }),
+          ...(extracted.phone        && { phone:         extracted.phone }),
+          ...(extracted.email        && { email:         extracted.email }),
+          ...(extracted.website      && { website:       extracted.website }),
+          ...addressFieldsFromExtracted(extracted)
+        }
+        if (place) {
+          next.placeId = place.placeId || next.placeId
+          if (typeof place.lat === 'number') next.lat = place.lat
+          if (typeof place.lon === 'number') next.lon = place.lon
+          if (place.website && !next.website) next.website = place.website
+          if (place.phone && !next.phone) next.phone = place.phone
+          Object.assign(next, addressFieldsFromExtracted(place))
+          if (place.address) next.address = place.address
+        }
+        next.address = joinAddress(next)
+        return next
+      })
+      showToast(place
+        ? 'Card scanned — address filled from Google Places. Review and confirm.'
+        : 'Card scanned — review and confirm fields', 'success')
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
@@ -213,7 +254,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
     }
     setSaving(true)
     try {
-      await addVisit({ ...form, timestamp: new Date(form.visitedAt).getTime() })
+      await addVisit({ ...form, address: joinAddress(form), timestamp: new Date(form.visitedAt).getTime() })
       scheduleFlush()
       onSaved()
     } catch (e) {
@@ -292,14 +333,57 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           </div>
 
           <div className="form-group">
-            <label className="form-label">Address</label>
+            <label className="form-label">Address 1</label>
             <input
               className="form-input"
-              value={form.address}
-              onChange={set('address')}
+              value={form.address1}
+              onChange={set('address1')}
               placeholder="Street address"
               autoCapitalize="words"
             />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Address 2</label>
+            <input
+              className="form-input"
+              value={form.address2}
+              onChange={set('address2')}
+              placeholder="Suite, unit"
+              autoCapitalize="words"
+            />
+          </div>
+          <div className="input-row" style={{ gridTemplateColumns: '2fr 0.7fr 1fr' }}>
+            <div className="form-group">
+              <label className="form-label">City</label>
+              <input
+                className="form-input"
+                value={form.city}
+                onChange={set('city')}
+                placeholder="City"
+                autoCapitalize="words"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">State</label>
+              <input
+                className="form-input"
+                value={form.state}
+                onChange={set('state')}
+                placeholder="CA"
+                maxLength={2}
+                autoCapitalize="characters"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Zip</label>
+              <input
+                className="form-input"
+                value={form.zip}
+                onChange={set('zip')}
+                placeholder="93727"
+                inputMode="numeric"
+              />
+            </div>
           </div>
 
           <div className="input-row">
