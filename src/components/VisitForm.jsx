@@ -266,7 +266,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           if (placeHasParts) Object.assign(next, placeParts)
           next.address = joinAddress(next) || place.address || ''
         } else {
-          next.address = joinAddress(next)
+          next.address = joinAddress(next) || next.address
         }
         return next
       })
@@ -287,7 +287,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
     }
     setSaving(true)
     try {
-      await addVisit({ ...form, address: joinAddress(form), timestamp: new Date(form.visitedAt).getTime() })
+      await addVisit({ ...form, address: joinAddress(form) || form.address || '', timestamp: new Date(form.visitedAt).getTime() })
       scheduleFlush()
       onSaved()
     } catch (e) {
