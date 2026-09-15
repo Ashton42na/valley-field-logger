@@ -4,6 +4,20 @@ export function joinAddress({ address1, address2, city, state, zip } = {}) {
   return parts.join(', ')
 }
 
+export function structuredAddressFrom(source = {}) {
+  return {
+    address1: source.address1 || '',
+    address2: source.address2 || '',
+    city: source.city || '',
+    state: source.state || '',
+    zip: source.zip || ''
+  }
+}
+
+function hasStructuredAddress(source = {}) {
+  return !!(source.address1 || source.address2 || source.city || source.state || source.zip)
+}
+
 export function parsePlaceComponents(components) {
   if (!Array.isArray(components)) return {}
   let streetNumber, route, subpremise, city, state, zip
@@ -29,12 +43,8 @@ export function parsePlaceComponents(components) {
 }
 
 export function addressFieldsFromExtracted(extracted = {}) {
-  return {
-    ...(extracted.address && { address: extracted.address }),
-    ...(extracted.address1 && { address1: extracted.address1 }),
-    ...(extracted.address2 && { address2: extracted.address2 }),
-    ...(extracted.city && { city: extracted.city }),
-    ...(extracted.state && { state: extracted.state }),
-    ...(extracted.zip && { zip: extracted.zip })
-  }
+  const out = {}
+  if (extracted.address) out.address = extracted.address
+  if (hasStructuredAddress(extracted)) Object.assign(out, structuredAddressFrom(extracted))
+  return out
 }
