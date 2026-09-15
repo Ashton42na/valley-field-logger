@@ -14,14 +14,6 @@ export function structuredAddressFrom(source = {}) {
   }
 }
 
-export function assignNonEmptyStructured(target, source = {}) {
-  const parts = structuredAddressFrom(source)
-  for (const key of ['address1', 'address2', 'city', 'state', 'zip']) {
-    if (parts[key]) target[key] = parts[key]
-  }
-  return target
-}
-
 function hasStructuredAddress(source = {}) {
   return !!(source.address1 || source.address2 || source.city || source.state || source.zip)
 }

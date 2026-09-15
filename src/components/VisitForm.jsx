@@ -8,7 +8,7 @@ import { applyCompanySnapshot, mergeVisitHistories } from '../utils/visitHistory
 import { loadTeamHistory, teamHistoryConfigured } from '../sync/historyService.js'
 import { searchByName } from '../utils/places.js'
 import { namesMatch, phonesMatch } from '../utils/placeMatch.js'
-import { joinAddress, addressFieldsFromExtracted, structuredAddressFrom, assignNonEmptyStructured } from '../utils/address.js'
+import { joinAddress, addressFieldsFromExtracted, structuredAddressFrom } from '../utils/address.js'
 
 const STATUSES = [
   { key: 'visited', label: 'Visited', emoji: '✅', cls: 'active-visited' },
@@ -119,7 +119,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
   const [form, setForm] = useState({
     companyName: b.name || '',
     address: b.address || '',
-    address1: b.address1 || b.address || '',
+    address1: b.address1 || (!(b.city || b.state || b.zip) ? (b.address || '') : ''),
     address2: b.address2 || '',
     city: b.city || '',
     state: b.state || '',
@@ -262,7 +262,7 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
           if (typeof place.lon === 'number') next.lon = place.lon
           if (place.website && !next.website) next.website = place.website
           if (place.phone && !next.phone) next.phone = place.phone
-          assignNonEmptyStructured(next, place)
+          Object.assign(next, structuredAddressFrom(place))
           next.address = joinAddress(next) || place.address || ''
         } else {
           next.address = joinAddress(next) || next.address
