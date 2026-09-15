@@ -167,7 +167,13 @@ export default function VisitForm({ business, aiEnabled, onSaved, onCancel, show
 
   const set = (field) => (e) => {
     const val = typeof e === 'string' ? e : e.target.value
-    setForm(f => ({ ...f, [field]: val }))
+    setForm(f => {
+      const next = { ...f, [field]: val }
+      if (field === 'address1' || field === 'address2' || field === 'city' || field === 'state' || field === 'zip') {
+        next.address = joinAddress(next)
+      }
+      return next
+    })
   }
 
   useEffect(() => {
