@@ -1,3 +1,5 @@
+import { parsePlaceComponents, joinAddress } from './address.js'
+
 const PLACES_PROXY = '/.netlify/functions/places'
 
 export async function searchByName(query) {
@@ -36,10 +38,16 @@ export async function findNearby(lat, lon, radiusMeters = 100) {
 }
 
 function mapPlace(p) {
+  const parts = parsePlaceComponents(p.addressComponents)
   return {
     placeId: p.id || '',
     name: p.displayName?.text || '',
-    address: p.formattedAddress || '',
+    address: p.formattedAddress || joinAddress(parts) || '',
+    address1: parts.address1 || '',
+    address2: parts.address2 || '',
+    city: parts.city || '',
+    state: parts.state || '',
+    zip: parts.zip || '',
     phone: p.nationalPhoneNumber || '',
     website: p.websiteUri || '',
     industry: mapIndustry(p.types || [], p.primaryTypeDisplayName?.text),

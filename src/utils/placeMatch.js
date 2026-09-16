@@ -43,9 +43,16 @@ export function namesMatch(a, b) {
 }
 
 export function phonesMatch(a, b) {
-  const pa = normPhone(a)
-  const pb = normPhone(b)
+  const pa = nationalDigits(a)
+  const pb = nationalDigits(b)
   return !!pa && pa === pb
+}
+
+// Places nationalPhoneNumber is often "+1 559 555-1212" (11 digits); cards are 10-digit local.
+function nationalDigits(p) {
+  const d = normPhone(p)
+  if (d.length === 11 && d.startsWith('1')) return d.slice(1)
+  return d
 }
 
 export function addressesMatch(a, b) {

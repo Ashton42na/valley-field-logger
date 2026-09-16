@@ -20,7 +20,7 @@ export function exportVisitsToCSV(visits, filename) {
       d.toLocaleDateString('en-US'),
       d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       v.companyName,
-      v.address,
+      v.address || [v.address1, v.address2, [v.city, v.state, v.zip].filter(Boolean).join(' ')].filter(Boolean).join(', '),
       v.phone,
       v.website,
       v.industry,
