@@ -100,9 +100,9 @@ export default function VisitHistory({ visits, onReuseContact }) {
           Follow-up promised for {last.followUpDate}
         </div>
       )}
-      {summary.tone === 'skip' && (
-        <div className="history-banner skip">
-          Marked not interested {formatRelativeDays(last.timestamp)} — knocking again will burn this door
+      {summary.notAFit && (
+        <div className="history-banner notfit">
+          Marked not a fit {formatRelativeDays(summary.notAFitAt)} — knocking again will burn this door
         </div>
       )}
 

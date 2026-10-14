@@ -29,7 +29,8 @@ const OUTCOMES = [
   { key: 'spoke-to-owner',     label: 'Spoke to Owner' },
   { key: 'gatekeeper-only',    label: 'Gatekeeper Only' },
   { key: 'requested-callback', label: 'Requested Callback' },
-  { key: 'not-interested',     label: 'Not Interested' }
+  { key: 'not-interested',     label: 'Not Interested' },
+  { key: 'not-a-fit',          label: 'Not a Fit' }
 ]
 
 const INDUSTRIES = [

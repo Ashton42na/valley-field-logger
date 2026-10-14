@@ -1,8 +1,14 @@
 import { parsePlaceComponents, joinAddress } from './address.js'
 
 const PLACES_PROXY = '/.netlify/functions/places'
+// Dev-only screenshot data; statically false in normal builds, so the fixtures are tree-shaken out.
+const MOCK_DATA = import.meta.env.VITE_MOCK_DATA === '1'
 
 export async function searchByName(query) {
+  if (MOCK_DATA) {
+    const { mockSearchByName } = await import('../dev/fixtures.js')
+    return mockSearchByName(query)
+  }
   const res = await fetch(PLACES_PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -16,7 +22,13 @@ export async function searchByName(query) {
   return (data.places || []).map(mapPlace)
 }
 
-export async function findNearby(lat, lon, radiusMeters = 100) {
+export async function findNearby(lat, lon, radiusMeters = 800) {
+  if (MOCK_DATA) {
+    const { mockFindNearby } = await import('../dev/fixtures.js')
+    return mockFindNearby(lat, lon)
+      .map(p => ({ ...p, distMeters: haversine(lat, lon, p.lat, p.lon) }))
+      .sort((a, b) => a.distMeters - b.distMeters)
+  }
   const res = await fetch(PLACES_PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

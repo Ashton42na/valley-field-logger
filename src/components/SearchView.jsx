@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { searchByName, findNearby, formatDist } from '../utils/places.js'
 import { getAllVisits, getVisitsForPlace, selectVisitsForPlace } from '../db/db.js'
-import { applyCompanySnapshot, mergeVisitHistories, summarizeHistory, pillLabel, nearbyRank } from '../utils/visitHistory.js'
+import { applyCompanySnapshot, mergeVisitHistories, summarizeHistory, pillLabel, nearbyRank, flagPills, hideMutedPlaces } from '../utils/visitHistory.js'
 import { readTeamHistoryCache, fetchTeamHistoryBatch, teamHistoryConfigured } from '../sync/historyService.js'
 
 const IconSearch = () => (
@@ -53,10 +53,27 @@ function VisitCountPill({ summary }) {
   )
 }
 
-function BizCard({ biz, onSelect }) {
-  const dimmed = biz.history && (biz.history.tone === 'today' || biz.history.tone === 'skip')
+function flagClasses(summary) {
+  return [summary?.recentVisit && 'flag-recent', summary?.notAFit && 'flag-notfit'].filter(Boolean)
+}
+
+function FlagPills({ summary, style }) {
+  const labels = flagPills(summary)
+  if (!labels.length) return null
+  const classes = flagClasses(summary)
   return (
-    <div className={`biz-card ${dimmed ? 'dimmed' : ''}`} onClick={() => onSelect(biz)}>
+    <div className="flag-pills" style={style}>
+      {labels.map((label, i) => (
+        <span key={label} className={`flag-pill ${classes[i]}`}>{label}</span>
+      ))}
+    </div>
+  )
+}
+
+function BizCard({ biz, onSelect }) {
+  // Muted places never reach Nearby, so flags only show (as highlights) in name search.
+  return (
+    <div className={['biz-card', ...flagClasses(biz.history)].join(' ')} onClick={() => onSelect(biz)}>
       <div className="biz-card-head">
         <div className="biz-name">{biz.name}</div>
         <VisitCountPill summary={biz.history} />
@@ -72,20 +89,18 @@ function BizCard({ biz, onSelect }) {
           <span className="biz-industry">{biz.industry}</span>
         </div>
       )}
+      <FlagPills summary={biz.history} />
     </div>
   )
 }
 
 function coverageStats(places) {
-  let due = 0, neu = 0, today = 0
+  let due = 0, neu = 0
   for (const p of places) {
-    if (!p.history?.count) { neu++; continue }
-    if (p.history.tone === 'due') due++
-    else if (p.history.tone === 'today') today++
-    else neu++ // skip/prior still "seen" but the strip counts new vs due vs today
+    if (!p.history?.count) neu++
+    else if (p.history.tone === 'due') due++
   }
-  const seen = places.filter(p => p.history?.count).length
-  return { due, neu: places.length - seen, today }
+  return { due, neu }
 }
 
 export default function SearchView({ onSelectBusiness }) {
@@ -226,6 +241,9 @@ export default function SearchView({ onSelectBusiness }) {
   }, [query, onSelectBusiness])
 
   const isSearching = loading || gpsLoading
+  const { visible, hiddenCount } = mode === 'gps'
+    ? hideMutedPlaces(results)
+    : { visible: results, hiddenCount: 0 }
 
   return (
     <div className="view-inner">
@@ -275,6 +293,7 @@ export default function SearchView({ onSelectBusiness }) {
             {manualHistory?.count > 0 && (
               <VisitCountPill summary={manualHistory} />
             )}
+            <FlagPills summary={manualHistory} style={{ marginTop: 0 }} />
           </button>
         )}
       </div>
@@ -293,23 +312,27 @@ export default function SearchView({ onSelectBusiness }) {
       {!isSearching && results.length > 0 && (
         <>
           <p className="section-title">
-            {mode === 'gps' ? `${results.length} nearby businesses` : `${results.length} results`}
+            {mode === 'gps' ? `${visible.length} nearby businesses` : `${visible.length} results`}
           </p>
           {mode === 'gps' && (() => {
-            const { due, neu, today } = coverageStats(results)
+            const { due, neu } = coverageStats(visible)
             return (
               <p className="coverage-strip">
                 {due > 0 && <span>{due} due</span>}
                 <span>{neu} new</span>
-                {today > 0 && <span>{today} already today</span>}
               </p>
             )
           })()}
-          <div className="card" style={{ marginBottom: 16 }}>
-            {results.map((biz, i) => (
-              <BizCard key={biz.placeId || biz.name + i} biz={biz} onSelect={onSelectBusiness} />
-            ))}
-          </div>
+          {hiddenCount > 0 && (
+            <p className="muted-note">{hiddenCount} recently visited / not-a-fit hidden</p>
+          )}
+          {visible.length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              {visible.map((biz, i) => (
+                <BizCard key={biz.placeId || biz.name + i} biz={biz} onSelect={onSelectBusiness} />
+              ))}
+            </div>
+          )}
         </>
       )}
 
