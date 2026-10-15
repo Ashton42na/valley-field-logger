@@ -22,7 +22,7 @@ export async function searchByName(query) {
   return (data.places || []).map(mapPlace)
 }
 
-export async function findNearby(lat, lon, radiusMeters = 800) {
+export async function findNearby(lat, lon, radiusMeters = 100) {
   if (MOCK_DATA) {
     const { mockFindNearby } = await import('../dev/fixtures.js')
     return mockFindNearby(lat, lon)
