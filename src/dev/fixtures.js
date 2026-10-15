@@ -29,7 +29,8 @@ function place(id, name, address1, city, zip, phone, industry, offset) {
   }
 }
 
-// Nearby: plain, prior, due and cleared-not-a-fit cards show; recent + not-a-fit are hidden.
+// Nearby: plain, prior, due and cleared-not-a-fit cards first; recent (Fig Garden) and
+// not-a-fit (Shaw Law) sort under the "Recently worked (2)" divider with their pills.
 const NEARBY = [
   place('sierra-dental', 'Sierra Vista Dental Group', '1420 W Shaw Ave', 'Fresno', '93711', '(559) 555-0141', 'Healthcare', [0.0006, 0.0004]),
   place('tower-coffee', 'Tower District Coffee Co', '1180 N Wishon Ave', 'Fresno', '93728', '(559) 555-0172', 'Food & Beverage', [-0.0009, 0.0011]),

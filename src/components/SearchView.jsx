@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { searchByName, findNearby, formatDist } from '../utils/places.js'
 import { getAllVisits, getVisitsForPlace, selectVisitsForPlace } from '../db/db.js'
-import { applyCompanySnapshot, mergeVisitHistories, summarizeHistory, pillLabel, nearbyRank, flagPills, hideMutedPlaces } from '../utils/visitHistory.js'
+import { applyCompanySnapshot, mergeVisitHistories, summarizeHistory, pillLabel, nearbyRank, flagPills, partitionNearbyPlaces } from '../utils/visitHistory.js'
 import { readTeamHistoryCache, fetchTeamHistoryBatch, teamHistoryConfigured } from '../sync/historyService.js'
 
 const IconSearch = () => (
@@ -71,7 +71,7 @@ function FlagPills({ summary, style }) {
 }
 
 function BizCard({ biz, onSelect }) {
-  // Muted places never reach Nearby, so flags only show (as highlights) in name search.
+  // Recent / not-a-fit places get the same amber/red highlight and pills in Nearby and name search.
   return (
     <div className={['biz-card', ...flagClasses(biz.history)].join(' ')} onClick={() => onSelect(biz)}>
       <div className="biz-card-head">
@@ -241,9 +241,13 @@ export default function SearchView({ onSelectBusiness }) {
   }, [query, onSelectBusiness])
 
   const isSearching = loading || gpsLoading
-  const { visible, hiddenCount } = mode === 'gps'
-    ? hideMutedPlaces(results)
-    : { visible: results, hiddenCount: 0 }
+  // Nearby is ranked with muted places last; split them off so a divider can sit above them.
+  const { active, flagged } = mode === 'gps'
+    ? partitionNearbyPlaces(results)
+    : { active: results, flagged: [] }
+  const renderCard = (biz, i) => (
+    <BizCard key={biz.placeId || biz.name + i} biz={biz} onSelect={onSelectBusiness} />
+  )
 
   return (
     <div className="view-inner">
@@ -312,10 +316,10 @@ export default function SearchView({ onSelectBusiness }) {
       {!isSearching && results.length > 0 && (
         <>
           <p className="section-title">
-            {mode === 'gps' ? `${visible.length} nearby businesses` : `${visible.length} results`}
+            {mode === 'gps' ? `${results.length} nearby businesses` : `${results.length} results`}
           </p>
           {mode === 'gps' && (() => {
-            const { due, neu } = coverageStats(visible)
+            const { due, neu } = coverageStats(results)
             return (
               <p className="coverage-strip">
                 {due > 0 && <span>{due} due</span>}
@@ -323,16 +327,13 @@ export default function SearchView({ onSelectBusiness }) {
               </p>
             )
           })()}
-          {hiddenCount > 0 && (
-            <p className="muted-note">{hiddenCount} recently visited / not-a-fit hidden</p>
-          )}
-          {visible.length > 0 && (
-            <div className="card" style={{ marginBottom: 16 }}>
-              {visible.map((biz, i) => (
-                <BizCard key={biz.placeId || biz.name + i} biz={biz} onSelect={onSelectBusiness} />
-              ))}
-            </div>
-          )}
+          <div className="card" style={{ marginBottom: 16 }}>
+            {active.map(renderCard)}
+            {flagged.length > 0 && (
+              <div className="nearby-divider">Recently worked ({flagged.length})</div>
+            )}
+            {flagged.map((biz, i) => renderCard(biz, active.length + i))}
+          </div>
         </>
       )}
 

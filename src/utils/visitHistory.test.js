@@ -3,7 +3,7 @@ import {
   summarizeHistory,
   flagPills,
   nearbyRank,
-  hideMutedPlaces,
+  partitionNearbyPlaces,
   isNotAFit,
   mergeVisitHistories,
   OUTCOME_LABELS
@@ -239,22 +239,50 @@ describe('nearbyRank', () => {
   })
 })
 
-describe('hideMutedPlaces', () => {
-  it('hides recent and not-a-fit places and counts them', () => {
-    const places = [
-      { name: 'New', history: null },
-      { name: 'Prior', history: summarize([visit(90)]) },
-      { name: 'Recent', history: summarize([visit(10)]) },
-      { name: 'Not a fit', history: summarize([visit(200, { outcome: 'not-a-fit' })]) },
-      { name: 'Cleared', history: summarize([visit(200, { outcome: 'not-a-fit' }), visit(100, { outcome: 'left-info' })]) }
-    ]
-    const { visible, hiddenCount } = hideMutedPlaces(places)
-    expect(visible.map(p => p.name)).toEqual(['New', 'Prior', 'Cleared'])
-    expect(hiddenCount).toBe(2)
+describe('Nearby ordering', () => {
+  // Same comparator SearchView uses for Nearby.
+  const rankNearby = list => [...list].sort((a, b) =>
+    nearbyRank(a.history) - nearbyRank(b.history) || a.distMeters - b.distMeters
+  )
+  const places = () => [
+    { name: 'Not a fit', distMeters: 50, history: summarize([visit(200, { outcome: 'not-a-fit' })]) },
+    { name: 'Recent', distMeters: 100, history: summarize([visit(10)]) },
+    { name: 'New far', distMeters: 400, history: null },
+    { name: 'New near', distMeters: 150, history: null },
+    { name: 'Cleared', distMeters: 300, history: summarize([visit(200, { outcome: 'not-a-fit' }), visit(100, { outcome: 'left-info' })]) },
+    { name: 'Due', distMeters: 500, history: summarize([visit(90, { followUpDate: '2026-10-01' })]) }
+  ]
+
+  it('sorts muted places last, even when closer', () => {
+    expect(rankNearby(places()).map(p => p.name)).toEqual([
+      'Due', 'New near', 'New far', 'Cleared', 'Not a fit', 'Recent'
+    ])
   })
 
-  it('handles an empty list', () => {
-    expect(hideMutedPlaces([])).toEqual({ visible: [], hiddenCount: 0 })
+  it('keeps every place and splits flagged ones off in order', () => {
+    const { active, flagged } = partitionNearbyPlaces(rankNearby(places()))
+    expect(active.map(p => p.name)).toEqual(['Due', 'New near', 'New far', 'Cleared'])
+    expect(flagged.map(p => p.name)).toEqual(['Not a fit', 'Recent'])
+    expect(flagged.length).toBe(2) // "Recently worked (2)"
+  })
+
+  it('flagged places keep their pills', () => {
+    const { flagged } = partitionNearbyPlaces(places())
+    expect(flagged.map(p => flagPills(p.history))).toEqual([
+      ['Not a fit (last 365 days)'],
+      ['Visited in last 60 days']
+    ])
+  })
+
+  it('has no flagged group when nothing is muted', () => {
+    const { active, flagged } = partitionNearbyPlaces([{ name: 'New', history: null }])
+    expect(active).toHaveLength(1)
+    expect(flagged).toEqual([])
+  })
+
+  it('handles an empty or missing list', () => {
+    expect(partitionNearbyPlaces([])).toEqual({ active: [], flagged: [] })
+    expect(partitionNearbyPlaces(undefined)).toEqual({ active: [], flagged: [] })
   })
 })
 

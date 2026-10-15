@@ -197,13 +197,13 @@ export function nearbyRank(summary) {
   return 2
 }
 
-/** Nearby hides muted places entirely; the caller shows hiddenCount as a note. */
-export function hideMutedPlaces(places) {
-  const visible = []
-  let hiddenCount = 0
+/** Splits a ranked Nearby list into unflagged places and the "Recently worked" group, keeping order. */
+export function partitionNearbyPlaces(places) {
+  const active = []
+  const flagged = []
   for (const p of places || []) {
-    if (p.history?.muted) hiddenCount++
-    else visible.push(p)
+    if (p.history?.muted) flagged.push(p)
+    else active.push(p)
   }
-  return { visible, hiddenCount }
+  return { active, flagged }
 }
