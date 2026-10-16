@@ -15,7 +15,8 @@ const OUTCOME_LABELS = {
   'spoke-to-owner':     'Spoke to Owner',
   'gatekeeper-only':    'Gatekeeper Only',
   'requested-callback': 'Requested Callback',
-  'not-interested':     'Not Interested'
+  'not-interested':     'Not Interested',
+  'not-a-fit':          'Not a Fit'
 }
 
 const TEMP_COLORS = { cold: 'var(--blue)', warm: 'var(--yellow)', hot: 'var(--red)' }

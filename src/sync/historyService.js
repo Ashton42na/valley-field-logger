@@ -4,6 +4,8 @@ import { historyCacheKey } from '../utils/placeMatch.js'
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_BATCH = 20
+// Dev-only screenshot data; statically false in normal builds, so the fixtures are tree-shaken out.
+const MOCK_DATA = import.meta.env.VITE_MOCK_DATA === '1'
 
 function isValidHttpsUrl(v) {
   if (!v) return false
@@ -17,6 +19,7 @@ function isValidHttpsUrl(v) {
 
 /** Team overlay uses the same tracker URL + Field Logger Key as visit ingest. No portal URL. */
 export function teamHistoryConfigured() {
+  if (MOCK_DATA) return true
   return isValidHttpsUrl(getSyncBaseUrl()) && looksLikeFieldLoggerKey(getFieldLoggerKey())
 }
 
@@ -68,6 +71,10 @@ async function trackerFetch(path, { method = 'GET', body, signal } = {}) {
  * Writes the cache on success (including match:none, so we do not re-hit misses all day).
  */
 export async function fetchTeamHistory(place, { signal } = {}) {
+  if (MOCK_DATA) {
+    const { mockTeamHistory } = await import('../dev/fixtures.js')
+    return mockTeamHistory(place)
+  }
   if (!teamHistoryConfigured()) return emptyTeam()
   const params = new URLSearchParams()
   if (place.name) params.set('name', place.name)
@@ -88,6 +95,10 @@ export async function fetchTeamHistory(place, { signal } = {}) {
  * Batch lookup for search / Nearby cards (max 20). Caches each place. Never throws.
  */
 export async function fetchTeamHistoryBatch(places, { signal } = {}) {
+  if (MOCK_DATA) {
+    const { mockTeamHistoryBatch } = await import('../dev/fixtures.js')
+    return mockTeamHistoryBatch((places || []).slice(0, MAX_BATCH))
+  }
   if (!teamHistoryConfigured() || !places?.length) return { youUserName: '', results: [] }
   const slice = places.slice(0, MAX_BATCH)
   try {

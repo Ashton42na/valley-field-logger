@@ -3,7 +3,8 @@ const OUTCOME_LABELS = {
   'spoke-to-owner': 'Spoke to Owner',
   'gatekeeper-only': 'Gatekeeper Only',
   'requested-callback': 'Requested Callback',
-  'not-interested': 'Not Interested'
+  'not-interested': 'Not Interested',
+  'not-a-fit': 'Not a Fit'
 }
 
 export function exportVisitsToCSV(visits, filename) {

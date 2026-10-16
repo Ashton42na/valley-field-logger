@@ -346,7 +346,52 @@ html, body {
 
 .biz-card:last-child { border-bottom: none; }
 .biz-card:active { background: var(--s3); }
-.biz-card.dimmed { opacity: 0.55; }
+
+/* Nearby and name search: highlight (never dim) doors that were recently visited or marked not a fit.
+   Not-a-fit comes second so it wins when both apply. */
+.biz-card.flag-recent {
+  background: var(--yellow-dim);
+  box-shadow: inset 3px 0 0 var(--yellow);
+}
+.biz-card.flag-notfit {
+  background: var(--red-dim);
+  box-shadow: inset 3px 0 0 var(--red);
+}
+
+.flag-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.flag-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  line-height: 1.4;
+}
+.flag-pill.flag-recent {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+  border: 1px solid rgba(251,191,36,0.35);
+}
+.flag-pill.flag-notfit {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(248,113,113,0.3);
+}
+
+.nearby-divider {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 14px 16px 8px;
+  border-bottom: 1px solid var(--border);
+}
 
 .biz-card-head {
   display: flex;
@@ -390,12 +435,6 @@ html, body {
   background: var(--yellow-dim);
   color: var(--yellow);
   border-color: rgba(251,191,36,0.35);
-}
-
-.visit-count-pill.tone-skip {
-  background: var(--red-dim);
-  color: var(--red);
-  border-color: rgba(248,113,113,0.3);
 }
 
 .visit-count-pill.tone-today {
@@ -1213,7 +1252,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   border: 1px solid rgba(251,191,36,0.3);
 }
 
-.history-banner.skip {
+.history-banner.notfit {
   background: var(--red-dim);
   color: var(--red);
   border: 1px solid rgba(248,113,113,0.3);
